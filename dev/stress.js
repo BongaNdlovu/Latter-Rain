@@ -7,6 +7,7 @@ const R=window.ROW;
 
 /* ---------- shared helpers ---------- */
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const fullGC=async()=>{ if(window.gc){ window.gc(); await sleep(60); window.gc(); } await sleep(250); };
 const heapMB=()=>performance.memory?performance.memory.usedJSHeapSize/1048576:null;
 function census(){
   const ev=R.disasters.ev;
@@ -235,7 +236,7 @@ const MEM=[
    }},
   {name:'M6 · Timeout + speech churn', dur:10000,
    setup(){ R.main.start(); R.hearts=999; R.wx.rain=0.8; },
-   tick(){ if(Math.random()<0.15)R.main.narrate('memory probe '+(Math.random())); },
+   tick(){ if(Math.random()<0.15)R.main.showHint('memory probe '+(Math.random()),400); },
    verify(){ return {pass:true, detail:'timeout/speech churn completed'}; }},
   {name:'M7 · Array caps audit', dur:14000,
    setup(){
@@ -273,7 +274,7 @@ const MEM=[
    setup(){ R.main.start(); R.hearts=99; R.__wxIdx=0; },
    tick(){
      if(Math.random()<0.02){ R.__wxIdx=(R.__wxIdx+1)%R.WXN.length; R.wxSys.setW(R.__wxIdx); }
-     if(Math.random()<0.01)R.main.narrate('weather warp');
+     if(Math.random()<0.01)R.main.showWarn('weather warp');
    },
    heapBudget:4},
   {name:'M10 · Idle menu soak 14s', dur:14000,
@@ -319,6 +320,10 @@ async function runMem(){
     try{
       m.setup();
       R.hitStop=0;
+      /* r6 fair measuring: warm up 1 s (lazy caches, JIT), then force GC (when exposed) before the
+         baseline, and again before the end reading, so we compare retained heap, not pending garbage */
+      { const tw=performance.now(); while(performance.now()-tw<1000){ R.main.update(1/60); if(m.tick)m.tick(); await sleep(14); } }
+      await fullGC();
       const startH=heapMB(); const startC=census();
       const t0=performance.now();
       while(performance.now()-t0<m.dur){
@@ -326,8 +331,8 @@ async function runMem(){
         if(m.tick)m.tick();
         await sleep(14);
       }
-      await sleep(1200);
-      let tail=[]; for(let k=0;k<6;k++){ tail.push(heapMB()); await sleep(220); }
+      await sleep(400);
+      let tail=[]; for(let k=0;k<4;k++){ await fullGC(); tail.push(heapMB()); await sleep(150); }
       const endH=tail.every(x=>x==null)?null:Math.min(...tail.filter(x=>x!=null));
       let verdict={pass:true,detail:''};
       if(m.verify)verdict=m.verify();
@@ -339,7 +344,7 @@ async function runMem(){
       const budget=m.heapBudget||6;
       const pass=(heapDelta==null||heapDelta<budget)&&!capFail&&verdict.pass;
       memOut.push({name:m.name,pass,
-        detail:`heap ${startH==null?'n/a':startH.toFixed(1)+'→'+endH.toFixed(1)+'MB (Δ'+(heapDelta==null?'?':heapDelta.toFixed(1))+')'} · ${verdict.detail||''}${capFail?' CAP OVERRUN':''}`});
+        gc:!!window.gc,detail:`heap ${startH==null?'n/a':startH.toFixed(1)+'→'+endH.toFixed(1)+'MB (Δ'+(heapDelta==null?'?':heapDelta.toFixed(1))+')'} · ${verdict.detail||''}${capFail?' CAP OVERRUN':''}`});
     }catch(e){
       memOut.push({name:m.name,pass:false,detail:'ERROR '+e.message});
     }

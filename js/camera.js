@@ -28,7 +28,7 @@ C.update=function(dt){
 
 C.compute=function(){
   const t=R.t,S=R.S;
-  const speed=Math.min(1,Math.abs(R.vel)/R.W);
+  const speed=R.journey&&R.journey.locked()?R.journey.feel():Math.min(1,Math.abs(R.vel)/R.W);
   /* speed dolly pulls back when hauling, focus/zoom punch pushes in */
   C.zm=1.02
     +Math.sin(t*0.3)*0.010

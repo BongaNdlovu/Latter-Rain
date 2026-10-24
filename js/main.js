@@ -16,55 +16,115 @@ M.init=function(){
   R.focEl=$('foc');R.focFill=$('fbar').firstElementChild;
   R.transEl=$('trans');R.transLoc=$('transLoc');R.transSub=$('transSub');
   M.powsLast='';M.powsT=0;M.focLast=-1;
+  R.tricks.initDom();
 
   R.pb.onclick=e=>{e.stopPropagation();M.setPaused(!R.paused)};
   R.mb.onclick=e=>{e.stopPropagation();M.setMute(!R.muted)};
   $('ob').onclick=e=>{e.stopPropagation();M.photoMode()};
-  $('jb').onclick=e=>{e.stopPropagation();R.board.jump()};
-  [R.pb,R.mb,$('ob'),$('jb')].forEach(b=>b.addEventListener('pointerdown',e=>e.stopPropagation()));
-  /* swipe up = jump */
-  let swY=null,swT=0;
-  addEventListener('pointerdown',e=>{swY=e.clientY;swT=performance.now()},{passive:true});
-  addEventListener('pointerup',e=>{
-    if(swY!=null&&performance.now()-swT<350&&swY-e.clientY>60)R.board.jump();
-    swY=null;
+  $('jb').onclick=e=>{e.stopPropagation()};
+  /* jump button fires on pointerdown (touch or mouse) — no click delay */
+  $('jb').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();R.skate.press()});
+  $('jb').addEventListener('pointerup',()=>R.skate.release());
+  $('jb').addEventListener('pointercancel',()=>R.skate.release());
+  /* r8: ⤓ = hold to fast-fall in the air / manual on the ground (the "low" answer at a verse gate) */
+  const dnOn=v=>{R.skate.fall=v;R.tricks.keys.dn=v;if(!v)R.tricks.mLock=0};
+  $('dn').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();dnOn(1)});
+  $('dn').addEventListener('pointerup',()=>dnOn(0));
+  $('dn').addEventListener('pointercancel',()=>dnOn(0));
+  $('dn').onclick=e=>e.stopPropagation();
+  $('kb').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();R.tricks.press('kick')});
+  /* touch trick button: tap = kickflip (buffered if still on the ground) */
+  $('kb').onclick=e=>{e.stopPropagation()};
+  /* r6: touch has no SPACE key — the FOCUS meter is a tap target on touch screens */
+  $('foc').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(R.st!=='menu'&&R.st!=='over')M.toggleFocus()});
+  [R.pb,R.mb,$('ob'),$('jb'),$('kb'),$('dn')].forEach(b=>b.addEventListener('pointerdown',e=>e.stopPropagation()));
+  /* r8 touch / mouse: tap anywhere = ollie (hold = higher); tap again in the air = a trick; drag down = fast-fall /
+     manual (the LOWER gate word). There is no steering: the board auto-runs, like Vector. */
+  let gest=null;
+  const inRun=()=>(R.st==='play'||R.st==='wait')&&!R.paused;
+  addEventListener('pointerdown',e=>{
+    if(!inRun()||gest)return;
+    if(e.target.closest&&e.target.closest('button,select,input,#foc,#ov,#pz'))return;
+    gest={id:e.pointerId,y:e.clientY,dn:0};
+    const B=R.board,S=R.skate;
+    if(!B.grounded&&!S.crash&&!S.grind&&S.airT>.14&&B.jy>40*R.S&&!R.tricks.trk){
+      R.tricks.press(['kick','heel','shove'][Math.random()*3|0]);       /* airborne tap = trick */
+    }else S.press();
   },{passive:true});
+  addEventListener('pointermove',e=>{
+    if(!gest||e.pointerId!==gest.id||gest.dn)return;
+    if(e.clientY-gest.y>34){gest.dn=1;R.skate.fall=1;R.tricks.keys.dn=1}
+  },{passive:true});
+  const gestEnd=e=>{
+    if(!gest||e.pointerId!==gest.id)return;
+    R.skate.release();
+    if(gest.dn){R.skate.fall=0;R.tricks.keys.dn=0;R.tricks.mLock=0}
+    gest=null;
+  };
+  addEventListener('pointerup',gestEnd,{passive:true});
+  addEventListener('pointercancel',gestEnd,{passive:true});
   $('pr').onclick=()=>M.setPaused(false);
   $('prn').onclick=()=>{M.setPaused(false);M.start()};
   $('pp').onclick=()=>M.photoMode();
   $('pm').onclick=()=>{M.setPaused(false);M.buildMenu()};
-  document.addEventListener('visibilitychange',()=>{if(document.hidden){R.keys.l=R.keys.r=0;M.setPaused(true)}});
-  addEventListener('blur',()=>{R.keys.l=R.keys.r=0;M.setPaused(true)});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden){R.keys.l=R.keys.r=0;R.tricks.keys.dn=0;M.setPaused(true)}});
+  addEventListener('blur',()=>{R.keys.l=R.keys.r=0;R.tricks.keys.dn=0;M.setPaused(true)});
 
-  /* input */
-  const setPointer=e=>{
-    const x=(e.touches&&e.touches[0])?e.touches[0].clientX:e.clientX;
-    if(typeof x==='number')R.tx=R.clamp(x,R.W*0.07,R.W*0.93);
-  };
-  addEventListener('pointermove',setPointer,{passive:true});
-  addEventListener('pointerdown',setPointer,{passive:true});
-  addEventListener('touchmove',e=>{if(e.touches[0])setPointer(e)},{passive:true});
+  /* input (r8: no pointer steering — see the gesture handler above) */
+  /* r5b input: physical key (e.code) first so AZERTY/QWERTZ/Dvorak all work, then e.key as a fallback */
+  const CODE={KeyW:'w',ArrowUp:'up',KeyA:'a',ArrowLeft:'left',KeyD:'d',ArrowRight:'right',KeyS:'s',ArrowDown:'down',
+    KeyJ:'j',KeyZ:'z',KeyK:'k',KeyX:'x',KeyL:'l',KeyC:'c',KeyV:'v',KeyT:'t',KeyH:'h',KeyF:'f',KeyG:'g',KeyB:'b',KeyE:'e',KeyQ:'q',
+    KeyP:'p',Escape:'esc',KeyM:'m',KeyO:'o',ShiftLeft:'shift',ShiftRight:'shift',Space:'space',Enter:'enter',NumpadEnter:'enter'};
+  const KEY={' ':'space',Enter:'enter',Escape:'esc',Shift:'shift',ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
+  const kid=e=>CODE[e.code]||KEY[e.key]||(e.key&&e.key.length===1?e.key.toLowerCase():e.key);
+  M.kid=kid;
+  const typing=()=>{const a=document.activeElement;return a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT')};
   addEventListener('keydown',e=>{
-    const k=e.key;
-    if(k==='ArrowLeft'||k==='a'||k==='A')R.keys.l=1;
-    if(k==='ArrowRight'||k==='d'||k==='D')R.keys.r=1;
-    const tog=k==='p'||k==='P'||k==='Escape'||k==='m'||k==='M'||k==='o'||k==='O'||k==='Shift'||k===' '||k==='Enter'||k==='ArrowUp'||k==='w'||k==='W';
-    if(e.repeat&&tog)return;
-    if(k==='ArrowUp'||k==='w'||k==='W'){R.board.jump();return}
-    if(k==='p'||k==='P'||k==='Escape'){M.setPaused(!R.paused);return}
-    if(k==='m'||k==='M'){M.setMute(!R.muted);return}
-    if(k==='o'||k==='O'){M.photoMode();return}
-    if(k==='Shift'&&R.st==='play'){M.toggleFocus();return}
-    if(k===' '||k==='Enter'){
-      if(R.st==='menu'||R.st==='over'){e.preventDefault();M.start()}
-      else if(k===' '&&R.st==='play'){e.preventDefault();M.toggleFocus()}
+    if(typing())return;
+    const k=kid(e);
+    if(['up','down','left','right','space'].includes(k))e.preventDefault();   /* no page scroll / button activation */
+    if(k==='left'||k==='a'){R.keys.l=1;return}
+    if(k==='right'||k==='d'){R.keys.r=1;return}
+    if(k==='up'||k==='w'){if(!e.repeat)R.skate.press();return}      /* instant ollie on keydown; repeats ignored */
+    if(e.repeat)return;
+    /* tricks: J/Z kickflip · K/X heelflip · L/C 360 shove-it · V varial · T tre · H/F hardflip · G/B grabs · E/Q nose manual · S/↓ manual */
+    if(k==='j'||k==='z'){R.tricks.press('kick');return}
+    if(k==='k'||k==='x'){R.tricks.press('heel');return}
+    if(k==='l'||k==='c'){R.tricks.press('shove');return}
+    if(k==='v'){R.tricks.press('varial');return}
+    if(k==='t'){R.tricks.press('tre');return}
+    if(k==='h'||k==='f'){R.tricks.press('hard');return}
+    if(k==='g'){R.tricks.grabKey('indy',1);return}
+    if(k==='b'){R.tricks.grabKey('melon',1);return}
+    if(k==='e'||k==='q'){R.tricks.keys.nose=1;return}
+    if(k==='s'||k==='down'){R.tricks.keys.dn=1;R.skate.fall=1;return}
+    if(k==='p'||k==='esc'){M.setPaused(!R.paused);return}
+    if(k==='m'){M.setMute(!R.muted);return}
+    if(k==='o'){M.photoMode();return}
+    if(k==='shift'&&R.st!=='menu'&&R.st!=='over'){M.toggleFocus();return}
+    if(k==='space'||k==='enter'){
+      if(R.st==='menu'||R.st==='over'){const sv=M.save&&M.save();if(R.st==='menu'&&sv)M.startAt(sv.lvl,sv.score);else M.start()}   /* r14: Enter/Space on the menu continues a saved journey */
+      else if(R.paused&&k==='enter'){M.setPaused(false)}
+      else if(k==='space'){if(R.journey&&R.journey.locked())R.skate.press();else M.toggleFocus()}   /* r8: Space = ollie; Focus is Shift */
     }
   },{passive:false});
   addEventListener('keyup',e=>{
-    const k=e.key;
-    if(k==='ArrowLeft'||k==='a'||k==='A')R.keys.l=0;
-    if(k==='ArrowRight'||k==='d'||k==='D')R.keys.r=0;
+    const k=kid(e);
+    if(k==='left'||k==='a')R.keys.l=0;
+    if(k==='right'||k==='d')R.keys.r=0;
+    if(k==='s'||k==='down'){R.tricks.keys.dn=0;R.tricks.mLock=0;R.skate.fall=0}
+    if(k==='up'||k==='w'||k==='space')R.skate.release();
+    if(k==='g')R.tricks.grabKey('indy',0);
+    if(k==='b')R.tricks.grabKey('melon',0);
+    if(k==='e'||k==='q'){R.tricks.keys.nose=0;R.tricks.mLock=0}
   });
+  /* focus: the canvas/page takes keyboard focus on load and on any click */
+  const cv=document.querySelector('canvas');
+  if(cv){cv.tabIndex=0;cv.style.outline='none'}
+  const grab=()=>{try{const a=document.activeElement;if(a&&a!==document.body&&a!==cv&&a.tagName==='BUTTON')a.blur();window.focus();cv&&cv.focus({preventScroll:true})}catch(_){}};
+  M.grabFocus=grab;
+  addEventListener('load',grab);setTimeout(grab,0);
+  addEventListener('pointerdown',e=>{if(!e.target.closest||!e.target.closest('button,select,input,#menu,#pz'))grab()},{passive:true});
 };
 
 /* ---------- UI helpers ---------- */
@@ -85,6 +145,7 @@ const HEART='<svg viewBox="0 0 24 22"><path d="M12 21s-9-5.6-9-12a5 5 0 0 1 9-3 
 const heartsHTML=()=>Array.from({length:R.maxHearts},(_,i)=>`<span class="${i<R.hearts?'':'x'}">${HEART}</span>`).join('');
 const mult=()=>1+Math.min(4,Math.floor(R.streak/3));
 const addScore=n=>{R.score+=Math.round(n*R.scoreMul)};
+M.addScore=addScore;M.mult=mult;
 
 /* ---------- board unlocks ---------- */
 M.boardUnlocked=function(i){
@@ -98,6 +159,7 @@ M.boardUnlocked=function(i){
     return best>=b.req.v;
   }
   if(b.req.kind==='card')return R.tryGet('rotw-unlock-transformer')==='1';
+  if(b.req.kind==='xp')return (R.xp||0)>=b.req.v;
   return false;
 };
 M.saveRecords=function(){
@@ -112,10 +174,45 @@ M.checkUnlocks=function(){
 };
 
 /* ---------- verse ---------- */
-M.loadVerse=function(){
-  let i;
-  if(R.lvl-1<R.V.length)i=R.lvl-1;
-  else{do{i=Math.random()*R.V.length|0}while(i===R.lastIdx)}
+
+/* ---------- verse selection (V3): a persistent shuffle-bag, so EVERY verse comes up before any repeats ----------
+   · difficulty tiers by verse length: short (<80 chars) early, medium from level 4, long from level 10
+   · the bag is saved (rotw-vbag), survives reloads, and tops itself up with verses added later
+   · level 1 of a brand-new save is always Psalm 23:1 (idx 0), as before */
+M.vTier=i=>{const n=R.V[i][0].length;return n<80?0:n<125?1:2};
+M.vBag=function(){
+  let bag=null;try{bag=JSON.parse(R.tryGet('rotw-vbag')||'null')}catch(e){}
+  if(!Array.isArray(bag))bag=null;
+  if(bag)bag=bag.filter(n=>Number.isInteger(n)&&n>=0&&n<R.V.length);
+  return bag;
+};
+M.nextVerseIdx=function(){
+  let bag=M.vBag();
+  const fresh=!bag;
+  if(!bag||!bag.length){
+    bag=R.V.map((v,k)=>k);
+    for(let k=bag.length-1;k>0;k--){const j=Math.random()*(k+1)|0;[bag[k],bag[j]]=[bag[j],bag[k]]}
+    R.vCycles=(R.vCycles||0)+1;
+  }
+  /* verses added after the bag was saved are mixed in */
+  const have=new Set(bag);const seenKey=+R.tryGet('rotw-vn')||0;
+  if(!fresh&&seenKey&&seenKey<R.V.length){for(let k=seenKey;k<R.V.length;k++)if(!have.has(k))bag.splice(Math.random()*(bag.length+1)|0,0,k)}
+  R.trySet('rotw-vn',String(R.V.length));
+  const maxT=R.lvl<4?0:R.lvl<10?1:2;
+  let pos=-1;
+  if(fresh&&R.lvl===1&&!R.col.some(Boolean))pos=bag.indexOf(0);
+  if(pos<0){
+    const ok=[];for(let k=0;k<bag.length;k++)if(bag[k]!==R.lastIdx&&M.vTier(bag[k])<=maxT)ok.push(k);
+    if(ok.length)pos=ok[Math.random()*ok.length|0];
+    else pos=bag.findIndex(n=>n!==R.lastIdx);
+    if(pos<0)pos=0;
+  }
+  const idx=bag.splice(pos,1)[0];
+  R.trySet('rotw-vbag',JSON.stringify(bag));
+  return idx;
+};
+M.loadVerse=function(idx){
+  const i=idx!=null?idx:M.nextVerseIdx();
   R.lastIdx=i;
   const txt=R.V[i][0],ref=R.V[i][1];
   R.verse={idx:i,ref,txt:txt.replace(/[\[\]]/g,''),
@@ -126,11 +223,23 @@ M.loadVerse=function(){
   M.renderVerse();
   R.vEl.classList.remove('in');void R.vEl.offsetWidth;R.vEl.classList.add('in');
 };
+/* keep the rank pill clear of the verse panel: if a tall verse (phones) reaches it, drop the pill under the panel */
+M.placeRank=function(){
+  const rk=document.getElementById('rkp'),v=R.vEl;if(!rk||!v)return;
+  rk.style.top='';
+  /* layout boxes (offset*) ignore the entry animation's transform, so the result is stable */
+  const vr0=v.getBoundingClientRect(),vt=v.offsetTop,vb=vt+v.offsetHeight,vl=vr0.left,vr=vr0.right;
+  const rr0=rk.getBoundingClientRect(),rt=rk.offsetTop,rb=rt+rk.offsetHeight,rl=rr0.left,rr=rr0.right;
+  const hit=v.offsetHeight&&!(vr<=rl||rr<=vl||vb<=rt||rb<=vt);
+  if(hit)rk.style.top=(vb+8)+'px';
+};
+addEventListener('resize',()=>M.placeRank&&M.placeRank());
 M.renderVerse=function(){
   if(!R.verse||!R.verse.parts.length){R.vEl.innerHTML=''}
   else{
+    const curP=R.verse.parts.find(p=>p.b&&!p.f);
     R.vEl.innerHTML=R.verse.parts.map(p=>
-      p.b?`<span class="b${p.f?' f'+(p.fresh?' n':''):(p.m?' m':'')}">${p.f?p.w:'_____'}</span>`:p.w
+      p.b?`<span class="b${p.f?' f'+(p.fresh?' n':''):(p.m?' m':'')}${p===curP?' cur':''}">${p.f?p.w:'_____'}</span>`:p.w
     ).join('')+`<small>${R.verse.ref}</small>`;
     R.verse.parts.forEach(p=>p.fresh=0);
     const tot=R.verse.parts.reduce((n,p)=>n+(p.b?1:0),0),
@@ -138,6 +247,7 @@ M.renderVerse=function(){
     R.barEl.style.width=(tot?Math.round(got/tot*100):0)+'%';
   }
   R.hEl.innerHTML=heartsHTML();
+  M.placeRank();
   R.ltEl.textContent='Level '+R.lvl;
   R.locEl.textContent=R.LOC[R.locI].n;
   R.stEl.innerHTML=(R.streak>1?`<i class="stk">${R.streak} streak · x${mult()}</i>`:'')+`<em>Best ${R.best}</em>`;
@@ -177,6 +287,7 @@ M.catchCard=function(c){
       }
       if(!R.col[R.verse.idx]){R.col[R.verse.idx]=1;R.newCol=true;R.trySet('rotw-col',JSON.stringify(R.col))}
       R.done++;
+      R.tricks.gain(100,true);
       R.focusM=Math.min(1,R.focusM+0.15);
       M.checkUnlocks();
       R.waitT=Math.max(1.2,2.2-R.lvl*0.05);
@@ -261,6 +372,7 @@ M.applyPow=function(p,c){
 M.scoreAir=function(o){
   R.stats.obst++;
   addScore(30);
+  R.tricks.gain(30,true);R.tricks.clearBonus();
   R.fx.flyTexts.push({w:'Clean! +30',x:o.x,y:R.gy-50*R.S,t:0,col:'150,240,220',small:1});
   R.audio.tone(880,'sine',0.15,0.06);
 };
@@ -283,7 +395,7 @@ M.hitObstacle=function(o){
   R.shake=1.2;R.CA=6;
   R.fx.hitStop(0.12);R.cam.punchFn(1.2);
   /* the crash staggers the board: knocked back and briefly slowed */
-  R.tx=R.clamp(R.px-Math.sign(o.x-R.px||1)*46*R.S,R.W*0.07,R.W*0.93);
+  if(R.skate)R.skate.knock(-Math.sign(o.x-R.px||1)*46*R.S);
   R.ts=Math.min(R.ts,0.55);
   R.board.squash=1;
   R.fx.burst(o.x,R.gy-12*R.S,o.type==='icerock'||o.type==='mound'?'rgba(200,230,255,0.9)':'rgba(180,140,90,0.9)',36,320);
@@ -354,7 +466,7 @@ M.breakChain=function(){R.chain=0};
 M.toggleFocus=function(){
   if(R.paused)return;
   if(R.focusOn){R.focusOn=false;return}
-  if(R.focusM>=0.25&&R.st==='play'){
+  if(R.focusM>=0.25&&(R.st==='play'||R.st==='wait'||R.st==='trans')){
     R.focusOn=true;R.focusT=2.6;
     R.audio.arp([880,660,520,392],0.5,0.10);
     R.fx.flashScreen('rgba(140,190,255,.15)');
@@ -392,6 +504,7 @@ M.gameOver=function(){
   R.powsEl.innerHTML='';M.powsLast='';
   R.audio.roar(0,0);R.audio.quake(0);
   if(R.score>R.best){R.best=R.score;R.runBest=true;R.trySet('rotw-best-'+R.diff,R.best)}
+  R.tricks.saveXP();
   M.saveRecords();M.checkUnlocks();
   /* run stats card */
   const mm=Math.floor(R.stats.time/60),ss=Math.floor(R.stats.time%60);
@@ -402,9 +515,13 @@ M.gameOver=function(){
     stat(Math.round(R.stats.dist)+'m','Distance')+
     stat(R.done,'Verses')+
     stat('×'+(1+Math.min(10,R.stats.chainBest)*0.1).toFixed(1),'Best chain')+
+    (R.journey?stat(R.journey.stats.bibles,'Bibles')+stat(R.journey.stats.gatesOk+'/'+(R.journey.stats.gatesOk+R.journey.stats.gatesBad),'Gates right')+stat(R.journey.stats.tricks,'Trick cards')+stat(R.journey.stats.powers,'Powers earned'):'')+
     stat(R.stats.waves,'Waves ridden')+
     stat(R.stats.obst,'Obstacles cleared')+
     stat(R.stats.med,'Medkits')+
+    stat(R.tricks.landed,'Tricks landed')+
+    stat('×'+R.tricks.bestCombo,'Best combo')+
+    stat(R.tricks.RANKS[R.tricks.rankOf(R.xp)][1],'Rank')+
     `</div>`;
   R.ov.style.display='flex';
   R.ov.innerHTML=
@@ -432,17 +549,17 @@ M.buildMenu=function(){
   R.barEl.style.width='0%';
   R.powsEl.innerHTML='';M.powsLast='';
   R.audio.roar(0,0);R.audio.quake(0);
-  R.shield=0;R.slowT=0;R.slowF=1;R.wideT=0;R.seekT=0;R.transformT=0;R.disasters.ev=null;R.disasters.pending=null;
-  R.clearWorld();
+  R.shield=0;R.slowT=0;R.slowF=1;R.wideT=0;R.seekT=0;R.transformT=0;R.disasters.ev=null;R.disasters.pending=null;R.disasters.gapBomb=R.disasters.gapDis=0;
+  R.clearWorld();if(R.journey)R.journey.reset();
   R.score=0;R.sShown=0;R.sLast=-1;R.sEl.textContent='0';R.streak=0;R.lvl=1;R.done=0;
-  R.locI=0;
+  R.locI=M.locFor(1);R.todSet(R.locI);M._todN='';
   let bi=Math.max(0,Math.min(R.BOARDS.length,+R.tryGet('rotw-board')||0));
   if(!M.boardUnlocked(bi))bi=0;
   R.boardI=bi;
   R.env.buildAll();R.ground.build();R.ground.resetObs();R.rain.build();
   R.maxHearts=R.DIFFS[R.diff].hearts;R.hearts=R.maxHearts;
   R.best=+R.tryGet('rotw-best-'+R.diff)||0;
-  R.hEl.innerHTML=heartsHTML();R.ltEl.textContent='Level 1';R.locEl.textContent=R.LOC[0].n;R.barEl.style.width='0%';
+  R.hEl.innerHTML=heartsHTML();R.ltEl.textContent='Level 1';R.locEl.textContent=R.LOC[R.locI].n;R.barEl.style.width='0%';
   R.stEl.innerHTML=`<em>Best ${R.best}</em>`;
   R.ov.style.display='flex';
   const bs=R.DIFFS.map((dd,i)=>{
@@ -455,24 +572,38 @@ M.buildMenu=function(){
   const tUnlocked=M.boardUnlocked(R.BOARDS.length);
   const bPills=R.BOARDS.map((b,i)=>{
     const un=M.boardUnlocked(i);
-    return `<button class="db${i===R.boardI?' on':''}" data-b="${i}"${un?'':' disabled'}>${un?'':'🔒 '}${b.n}<small>${un?b.desc:b.req.text}</small></button>`;
+    return `<button class="db bd${i===R.boardI?' on':''}${un?'':' lk'}" data-b="${i}"${un?'':' disabled'}><canvas class="bth" data-bt="${i}" width="132" height="56"></canvas>${un?'':'🔒 '}${b.n}<small>${un?b.desc:b.req.text}</small></button>`;
   }).join('')+
-    `<button class="db${R.boardI===R.BOARDS.length?' on':''}" data-b="${R.BOARDS.length}"${tUnlocked?'':' disabled'}>${tUnlocked?'⚡':'🔒 ⚡'} Transformer<small>${tUnlocked?R.TRANSFORM.desc:R.TRANSFORM.req.text}</small></button>`;
+    `<button class="db bd${R.boardI===R.BOARDS.length?' on':''}${tUnlocked?'':' lk'}" data-b="${R.BOARDS.length}"${tUnlocked?'':' disabled'}><canvas class="bth" data-bt="${R.BOARDS.length}" width="132" height="56"></canvas>${tUnlocked?'⚡':'🔒 ⚡'} Transformer<small>${tUnlocked?R.TRANSFORM.desc:R.TRANSFORM.req.text}</small></button>`;
   R.ov.innerHTML=
     '<h1>Rain of the Word</h1>'+
-    '<p class="tag">Skate the storm · catch the verse · survive the sky</p>'+
-    `<div class="msec"><b>Boards</b><div class="row">${bPills}</div>`+
+    '<p class="tag">Ride the journey · outrun the last plague · complete the verse</p>'+
+    `<div class="msec"><b>Boards</b><div class="bpv"><canvas id="bprev" width="440" height="150"></canvas><span id="bpn"></span></div><div class="row">${bPills}</div>`+
     `<div class="mline sub">Unlock new boards by travelling further, collecting verses and setting records.</div></div>`+
     `<div class="msec"><b>Difficulty</b><div class="row">${bs}</div></div>`+
-    `<div class="msec"><b>Journey</b><div class="mline">${R.LOC.map(l=>l.n).join(' &nbsp;·&nbsp; ')}</div>`+
-    `<div class="mline sub">Every 10th level is the tsunami summit · storms, tornadoes, quakes &amp; hail roam the land · ⛒ medkits drop when you are critical</div></div>`+
+    `<div class="msec"><b>Graphics</b><div class="row">${[['auto','Auto','adapts to your device'],['high','High','full-res sky &amp; bloom'],['medium','Medium','softer far layers'],['low','Low','fastest']].map(([k,n,d])=>`<button class="db${R.qualSet===k?' on':''}" data-q="${k}">${n}<small>${d}</small></button>`).join('')}</div></div>`+
+    `<div class="msec"><b>Journey</b><div class="row"><select id="startSel" class="sel">`+
+      `<option value="-2"${R.startPick===-2?' selected':''}>🌍 World Tour · starts in London</option>`+
+      `<option value="-1"${R.startPick===-1?' selected':''}>🎲 Random order</option>`+
+      R.LOC.map((l,i)=>`<option value="${i}"${R.startPick===i?' selected':''}>Start in ${l.n}</option>`).join('')+
+    `</select></div><div class="mline">${M.tourNames().join(' &nbsp;·&nbsp; ')}</div>`+
+    `<div class="mline sub">Every 10th level is the tsunami summit · tornadoes, earthquakes (fissures &amp; debris), lightning strikes, sandstorms, wildfires &amp; hail roam the land — each one is announced first · ⛒ medkits drop when you are critical</div></div>`+
     `<div class="msec"><b>Scripture Collection</b><div class="cbar"><i style="width:${pct}%"></i></div>`+
     `<div class="mline sub">${colCount} of ${R.V.length} verses collected</div>`+
     (colCount?`<details><summary>view collected verses</summary><div class="cvs">${pills}</div></details>`:'')+
     `</div>`+
-    `<div class="mline ctr">A·D / arrows move &nbsp;·&nbsp; W / ↑ jump &nbsp;·&nbsp; Space focus &nbsp;·&nbsp; P pause &nbsp;·&nbsp; O snapshot &nbsp;·&nbsp; M mute</div>`+
-    `<div class="mline sub ctr">Specials: 🛡 Shield · ⏳ Be still · 🏮 Lamp unto my feet · ✦ Seek · ❤️ Mercy · ⚡ Transformer</div>`+
+    `<div class="mline ctr">The board runs by itself &nbsp;·&nbsp; Space / W / ↑ / tap = ollie (hold = higher; tap again in the air = trick) &nbsp;·&nbsp; S / ↓ / drag down = fast-fall &amp; manual &nbsp;·&nbsp; verse gates: ⬆ jump through the upper word, ⬇ stay low for the lower &nbsp;·&nbsp; low beams: stay on the ground &nbsp;·&nbsp; Shift focus &nbsp;·&nbsp; P pause &nbsp;·&nbsp; M mute</div>`+
+    `<details class="msec"><summary><b>Trick list &amp; street guide</b></summary><div class="mline sub" style="text-align:left;line-height:1.7">`+
+    `<b>Flips (in the air):</b> J Kickflip · K Heelflip · L 360 Shove-it · H Hardflip (or K+L) · V Varial Kickflip · T 360 Flip / Tre (or J+L)<br>`+
+    `<b>Grabs (hold in the air, let go before landing):</b> G Indy · B Melon<br>`+
+    `<b>Ground:</b> hold S / ↓ Manual · hold E Nose Manual<br>`+
+    `<b>Grinds:</b> land on a rail = 50-50 · hold ↓ as you land on a rail, ledge or bench = Boardslide · A/D keep your balance<br>`+
+    `<b>Bails:</b> slam (hit an obstacle face) · trip (wheels catch an edge, curb or pothole) · over-rotated (spin not finished) · primo (flip half done / grab still held)<br>`+
+    `<b>Edge markers:</b> <span style="color:#6ef0a0">green</span> skateable (curb, ledge, bench, rail, stairs, kicker, gap) · <span style="color:#ff6046">red</span> hazard — ollie it or lose a heart · <span style="color:#82c8ff">blue</span> puddle</div></details>`+
+    `<div class="mline sub ctr">📖 Bibles = points &amp; fill the ★ power meter (air Bibles need a jump) · ✦ trick cards auto-jump the next obstacle or gap · » speed pads &amp; trick landings = speed · 🌪 the last plague closes in when you crash or pick the wrong word · ★ power cards are earned (full meter or a perfect verse): 🛡 Shield · ⏳ Be still · 🏮 Lamp (Bible magnet) · ✦ Seek (shows the right gate word) · ❤️ Mercy · ⚡ Transformer</div>`+
     '<button id="go">Begin</button>';
+  M.drawBoardPreviews();
+  R.ov.querySelectorAll('.db[data-q]').forEach(b=>b.onclick=()=>{R.setQuality(b.dataset.q);M.buildMenu()});
   R.ov.querySelectorAll('.db[data-d]').forEach(b=>b.onclick=()=>{R.diff=+b.dataset.d;R.trySet('rotw-diff',R.diff);M.buildMenu()});
   R.ov.querySelectorAll('.db[data-b]').forEach(b=>{
     b.onclick=()=>{
@@ -480,17 +611,70 @@ M.buildMenu=function(){
       R.boardI=+b.dataset.b;R.trySet('rotw-board',R.boardI);M.buildMenu();
     };
   });
+  const ss=document.getElementById('startSel');
+  if(ss)ss.onchange=()=>{R.startPick=+ss.value;R.trySet('rotw-start',String(R.startPick));M.buildMenu()};
   document.getElementById('go').onclick=()=>M.start(false);
 };
+
+
+/* ---------- board previews in the menu (thumbnails + big spinning preview of the selected deck) ---------- */
+M.boardDef=i=>i>=R.BOARDS.length?R.TRANSFORM:R.BOARDS[i];
+M.drawBoardPreviews=function(){
+  const pose=(def,spin,vp)=>({flipAngle:0,spinAngle:spin,tilt:0,deckColors:[def.art[1],def.art[2]],gripColor:'#1d1d22',look:def.look,vp});
+  R.ov.querySelectorAll('canvas.bth').forEach(c=>{
+    const def=M.boardDef(+c.dataset.bt),g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);
+    /* r6: distinct previews — each deck sits on its own colour glow, is shown three-quarter so the
+       graphic reads, and carries speed / reach / jump bars so the boards differ at a glance */
+    g.save();if(c.closest('.lk'))g.globalAlpha=.4;
+    const rg=g.createRadialGradient(c.width/2,c.height*.6,2,c.width/2,c.height*.6,c.width*.55);
+    rg.addColorStop(0,`rgba(${def.glow},.42)`);rg.addColorStop(1,`rgba(${def.glow},0)`);g.fillStyle=rg;g.fillRect(0,0,c.width,c.height);
+    window.drawSkateboard(g,c.width*.42,c.height*.7,1.3,pose(def,-.85,.32));
+    const st=[['S',def.speed],['R',def.reach],['J',def.jump]];
+    g.font='bold 8px system-ui,sans-serif';g.textBaseline='middle';
+    st.forEach(([l,v],i)=>{const y=9+i*10,x=c.width-40;g.fillStyle='rgba(255,255,255,.75)';g.fillText(l,x-9,y);
+      g.fillStyle='rgba(255,255,255,.15)';g.fillRect(x,y-2.5,34,5);g.fillStyle=`rgb(${def.glow})`;g.fillRect(x,y-2.5,Math.max(2,Math.min(1,(v-.6)/.9)*34),5)});
+    g.restore();
+  });
+  const big=document.getElementById('bprev'),nm=document.getElementById('bpn');
+  if(!big)return;
+  const def=M.boardDef(R.boardI);nm.textContent=def.n+' — '+def.desc;
+  const g=big.getContext('2d');let t0=performance.now();
+  const spin=()=>{
+    if(!big.isConnected)return;
+    const t=(performance.now()-t0)/1000,sp=-.55+Math.sin(t*.9)*.45;
+    g.clearRect(0,0,big.width,big.height);
+    const rg=g.createRadialGradient(220,118,4,220,118,150);rg.addColorStop(0,`rgba(${def.glow},.35)`);rg.addColorStop(1,`rgba(${def.glow},0)`);
+    g.fillStyle=rg;g.save();g.translate(0,118);g.scale(1,.28);g.translate(0,-118);g.fillRect(0,0,440,300);g.restore();
+    window.drawSkateboard(g,220,112,3.4,pose(def,sp,.5+Math.sin(t*.9)*.08));
+    M._bprevT=requestAnimationFrame(spin);
+  };
+  cancelAnimationFrame(M._bprevT);spin();
+};
+
+/* ---------- location order (V2 picker + World Tour) ---------- */
+R.startPick=(()=>{const v=R.tryGet('rotw-start');return v===null?-2:+v})();
+if(!(R.startPick>=-2&&R.startPick<R.LOC.length))R.startPick=-2;
+M.order=function(){
+  const T=R.TOUR;
+  if(R.startPick===-1){
+    if(!M.rndOrder){M.rndOrder=T.slice();for(let i=M.rndOrder.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[M.rndOrder[i],M.rndOrder[j]]=[M.rndOrder[j],M.rndOrder[i]]}}
+    return M.rndOrder;
+  }
+  const s0=R.startPick>=0?Math.max(0,T.indexOf(R.startPick)):0;
+  return T.slice(s0).concat(T.slice(0,s0));
+};
+M.locFor=lvl=>{const o=M.order();return o[(lvl-1)%o.length]};
+M.tourNames=()=>M.order().map(i=>R.LOC[i].n);
 
 /* ---------- flow ---------- */
 M.pickWeather=function(lvl){
   if(lvl%10===0)return 'Tempest';
-  const loc=R.LOC[(lvl-1)%R.LOC.length];
+  const loc=R.LOC[M.locFor(lvl)];
   const opts=loc.wx.filter(n=>n!==R.wxSys.name());
   return opts.length?opts[Math.random()*opts.length|0]:loc.wx[0];
 };
 M.start=function(cont){
+  if(M.grabFocus)M.grabFocus();
   R.audio.init();R.audio.resume();
   M.setPaused(false);
   R.best=+R.tryGet('rotw-best-'+R.diff)||0;R.runBest=false;R.newCol=false;
@@ -503,13 +687,16 @@ M.start=function(cont){
   if(cont&&R.checkpoint>1){
     /* continue from the last checkpoint: level kept, score reduced a quarter */
     R.lvl=R.checkpoint;
-    R.score=Math.round(R.cpScore*0.75);
-    R.locI=(R.lvl-1)%R.LOC.length;
+    /* r14: a saved level start resumes with its own score; the old checkpoint keeps its 25% penalty */
+    R.score=R.resumeScore!=null?R.resumeScore:Math.round(R.cpScore*0.75);R.resumeScore=null;
+    if(!R.stats)R.stats={waves:0,obst:0,med:0,chainBest:0,time:0,dist:0};R.chain=R.chain||0;
+    R.locI=M.locFor(R.lvl);R.todSet(R.locI);M._todN='';R.todSet(R.locI);M._todN='';
     pick=M.pickWeather(R.lvl);
     if(R.lvl%10===0)R.forceShield=true;
   }else{
-    R.lvl=1;R.score=0;R.locI=0;
-    pick=R.LOC[0].wx[0];
+    if(R.startPick===-1)M.rndOrder=null;   /* fresh shuffle each new run */
+    R.lvl=1;R.score=0;R.locI=M.locFor(1);R.todSet(R.locI);M._todN='';
+    pick=R.LOC[R.locI].wx[0];
     R.chain=0;R.checkpoint=1;R.cpScore=0;
     R.stats={waves:0,obst:0,med:0,chainBest:0,time:0,dist:0};
     R.forceShield=false;
@@ -527,14 +714,17 @@ M.start=function(cont){
   R.disasters.arm();
   R.ground.resetObs();
   R.introT=1.8;
+  R.tricks.reset();R.tricks.landed=0;R.tricks.bestCombo=0;
+  M.titleCard('Now skating',R.LOC[R.locI].n,'Level '+R.lvl+' · '+(R.journey?R.journey.tagFor(R.lvl)+' · ':'')+R.WXN[R.wxI].n,2200);
   M.powsLast='§';R.powsEl.innerHTML='';
-  R.prevPx=R.W/2;R.px=R.tx=R.W/2;R.lean=0;
+  R.prevPx=R.px=R.tx=R.journey?R.journey.anchorX():R.W/2;R.lean=0;if(R.skate)R.skate.reset();
   R.cam.whipV=0;R.cam.whipX=0;R.cam.punch=0;
   R.ov.style.display='none';R.pz.style.display='none';
   R.rev.style.opacity=0;
   M.loadVerse();
-  if(!R.tryGet('rotw-h1')){M.showHint('Catch the glowing words that complete the verse — avoid the rest!',6000);R.trySet('rotw-h1','1')}
-  if(!R.tryGet('rotw-h3')){setTimeout(()=>{if(R.st==='play')M.showHint('Press SPACE for Focus — slow the storm.',5000);R.trySet('rotw-h3','1')},8000)}
+  if(R.journey){if(!cont)R.journey.resetRun();R.journey.startLevel()}
+  if(!R.tryGet('rotw-h1k')){M.showHint(matchMedia('(pointer:coarse)').matches?'The board runs by itself — TAP to jump (hold = higher), drag DOWN to stay low. Outrun the last plague to the finish 🏁':'The board runs by itself — SPACE / ↑ to jump (hold = higher), ↓ to stay low. Outrun the last plague to the finish 🏁',7000);R.trySet('rotw-h1k','1')}
+  if(!R.tryGet('rotw-h3k')){setTimeout(()=>{if(R.st==='play')M.showHint(matchMedia('(pointer:coarse)').matches?'Tap the FOCUS meter to slow the storm.':'Press SHIFT for Focus — slow the storm.',5000);R.trySet('rotw-h3k','1')},16000)}
 };
 
 /* advance to the next location: phase 1 closes the letterbox under a veil,
@@ -550,7 +740,7 @@ M.swapLocation=function(){
   M.saveRecords();M.checkUnlocks();
   /* checkpoint every 5th level: enables "Continue" on the game-over screen */
   if(R.lvl%5===0&&R.lvl>R.checkpoint){R.checkpoint=R.lvl;R.cpScore=R.score;}
-  R.locI=(R.lvl-1)%R.LOC.length;
+  R.locI=M.locFor(R.lvl);
   const pick=M.pickWeather(R.lvl);
   if(R.lvl%10===0)R.forceShield=true;
   R.wxSys.setW(pick);
@@ -562,22 +752,27 @@ M.swapLocation=function(){
   R.cam.whip((R.lvl%2?1:-1));
   R.disasters.arm();
   M.loadVerse();
+  if(R.journey)R.journey.startLevel();
   R.spawnT=0.9;
   /* title card */
-  if(R.transEl){
-    R.transLoc.textContent=R.LOC[R.locI].n;
-    R.transSub.textContent=R.lvl%10===0
+  M.titleCard('Traveling to',R.LOC[R.locI].n,R.lvl%10===0
       ?'Level '+R.lvl+' · TSUNAMI SURVIVAL'
-      :'Level '+R.lvl+' · '+R.wxSys.name();
-    R.transEl.classList.add('show');
-    clearTimeout(M.transCardT);
-    M.transCardT=setTimeout(()=>R.transEl.classList.remove('show'),1100);
-  }
+      :'Level '+R.lvl+' · '+(R.journey?R.journey.tagFor(R.lvl)+' · ':'')+R.wxSys.name(),1100);
   R.audio.arp([659,988],0.45,0.07);
 };
 M.finishTransition=function(){
   R.st='play';R.introT=0.9;R.swapped=false;
   R.transEl.classList.remove('show');
+};
+
+/* shared title card (#trans): travel cards and, from V2, the run-start card */
+M.titleCard=function(kicker,name,sub,ms){
+  if(!R.transEl)return;
+  const em=R.transEl.querySelector('em');if(em)em.textContent=kicker;
+  R.transLoc.textContent=name;R.transSub.textContent=sub;
+  R.transEl.classList.add('show');
+  clearTimeout(M.transCardT);
+  M.transCardT=setTimeout(()=>R.transEl.classList.remove('show'),ms||1100);
 };
 
 /* ---------- pause / mute ---------- */
@@ -616,11 +811,13 @@ M.tickHud=function(dt){
 
 /* ---------- update ---------- */
 M.update=function(dt){
+  /* r6 time of day clock (runs while skating a place) */
+  if(R.st==='play'||R.st==='wait'){R.todClock+=dt;const tn=R._tod&&R._tod.n;if(tn&&tn!==M._todN){M._todN=tn;R.locEl.textContent=R.LOC[R.locI].n+' · '+tn}}
   R.t+=dt;R.dt=dt;
   R.introT=Math.max(0,R.introT-dt);
   R.lbH+=((R.st==='trans'
     ?(R.transT>R.transDur*0.5?0.24:0.09)
-    :R.st==='wait'?0.085:R.introT>0?0.075:0.035)-R.lbH)*Math.min(1,dt*3);
+    :R.st==='wait'?0.085:R.introT>0?0.075:0.035)+(R.tricks.slowHold>0?0.06:0)-R.lbH)*Math.min(1,dt*3);
   R.CA=Math.max(0,R.CA-dt*10);
   R.wxSys.update(dt);
   /* score readout */
@@ -629,24 +826,18 @@ M.update=function(dt){
   const v=Math.round(R.sShown);
   if(v!==R.sLast){R.sLast=v;R.sEl.textContent=v}
   /* world scroll */
-  R.zs+=dt*R.ts*(0.9+R.lvl*0.06);
+  R.zs+=dt*R.ts*(0.9+R.lvl*0.06)*(R.journey?R.journey.mul:1);
   if(R.st==='play'){R.stats.time+=dt;R.stats.dist+=Math.abs(R.vel)*dt*0.06;}
   R.wRot+=dt*R.ts*(10+R.lvl*0.6);
   R.bPulse=Math.max(0,R.bPulse-dt*2.2);
   R.bRed=Math.max(0,R.bRed-dt*2.2);
   M.tickHud(dt);
   /* player */
-  R.prevPx=R.px;
-  const spd=R.board.def().speed;
-  if(R.keys.l)R.tx-=R.W*0.95*dt*spd;
-  if(R.keys.r)R.tx+=R.W*0.95*dt*spd;
-  R.tx=R.clamp(R.tx,R.W*0.07,R.W*0.93);
-  R.px+=(R.tx-R.px)*Math.min(1,dt*11*spd);
-  R.vel=(R.px-R.prevPx)/Math.max(dt,0.0001);
-  const leanT=R.clamp(R.vel/(R.W*0.9),-1,1);
-  R.lean+=(leanT-R.lean)*Math.min(1,dt*9);
+  /* player: momentum, pushing, friction, carving (skate.js) */
+  R.skate.move(dt);
   /* jump physics run before collisions: a fresh jump lifts the board this frame */
   R.board.update(dt);
+  R.tricks.update(dt);
   /* time scale + focus + power-ups */
   R.ts+=(1-R.ts)*Math.min(1,dt*2.6);
   if(R.focusOn){
@@ -655,7 +846,8 @@ M.update=function(dt){
   }
   R.slowT=Math.max(0,R.slowT-dt);R.wideT=Math.max(0,R.wideT-dt);R.seekT=Math.max(0,R.seekT-dt);
   R.transformT=Math.max(0,R.transformT-dt);
-  const sT=(R.focusOn&&R.slowT>0)?0.36:(R.focusOn?0.4:R.slowT>0?0.45:1);
+  let sT=(R.focusOn&&R.slowT>0)?0.36:(R.focusOn?0.4:R.slowT>0?0.45:1);
+  if(R.tricks.slowHold>0)sT=Math.min(sT,0.3);   /* big-landing slow-mo beat */
   R.slowF+=(sT-R.slowF)*Math.min(1,dt*4);
   /* decays */
   R.shake=Math.max(0,R.shake-dt*1.7);
@@ -667,6 +859,7 @@ M.update=function(dt){
   R.disasters.update(dt);
   R.rain.update(dt);
   R.ground.update(dt);
+  if(R.journey)R.journey.update(dt);
   R.fx.update(dt);
   /* rolling sound */
   if(R.audio.ready()&&(R.st==='play'||R.st==='wait'||R.st==='trans')){
@@ -683,11 +876,14 @@ M.update=function(dt){
   if(R.st==='play'){
     R.spawnT-=dt*R.slowF;
     if(R.spawnT<=0){
-      const n=R.lvl>=16?2:1;
-      for(let i=0;i<n;i++)R.ent.spawnCard();
-      R.spawnT=Math.max(0.42,(1.25-R.lvl*0.06)*R.sMul);
+      /* r6 smooth ramp: interval eases toward 0.5 s; a second card phases in gradually from level 12
+         (was: linear to a 0.42 s floor at level 14 then an abrupt double-spawn at 16) */
+      const n=Math.random()<Math.min(.55,Math.max(0,(R.lvl-12)/30))?2:1;
+      /* r7 journey: words no longer rain from the sky — they live on verse gates along the road (journey.js) */
+      void n;
+      R.spawnT=(0.5+0.75*Math.exp(-(R.lvl-1)/9))*R.sMul;
       /* bombs rain down from level 5: rare, glowing, devastating */
-      if(R.lvl>=5&&R.bombs.length<3&&Math.random()<0.09+R.lvl*0.005)R.ent.spawnBomb();
+      if(!R.journey&&R.lvl>=5&&R.bombs.length<3&&R.disasters.bombsAllowed()&&Math.random()<0.09+R.lvl*0.005)R.ent.spawnBomb();   /* r8: no bombs — the auto-run cannot dodge sideways */
     }
   }
   /* wait → transition → next place */
@@ -738,18 +934,22 @@ M.bombHit=function(x,caught){
 };
 
 /* ---------- loop ---------- */
-let last=performance.now();
+/* round 5: fixed 60 Hz simulation + interpolated rendering. The sim always advances by real time
+   (no slow motion below 30 fps), and the board is drawn between the last two sim states. */
+const STEP=1/60;let last=performance.now(),acc=0;
+M.steps=0;
 function loop(now){
   requestAnimationFrame(loop);
-  const raw=Math.min(0.05,(now-last)/1000);
-  if(R.paused){last=now;return}
+  const raw=Math.min(0.1,(now-last)/1000);
+  if(R.paused){last=now;acc=0;return}
   last=now;
-  /* viewport heartbeat: catch viewports that settled without a resize event */
+  /* r5b: an input that changed the board (ollie) gets at least one sim step and an un-interpolated draw
+     this very frame, and cancels any hit-stop freeze, so the take-off is visible on the next rendered frame */
+  const kick=M.kick;M.kick=0;
+  if(kick){R.hitStop=0;acc=Math.max(acc,STEP)}
   if((R.W!==innerWidth||R.H!==innerHeight)&&(innerWidth>10&&innerHeight>10))R.resize();
   R.fAvg+=(raw-R.fAvg)*0.08;
-  const dt=Math.min(0.033,raw*0.4+R.fAvg*0.6);
-  if(R.fAvg>0.024){R.qt+=raw;if(R.qt>2.5)R.Q=0.6}else R.qt=Math.max(0,R.qt-raw);
-  /* hit-stop: freeze the world, keep a breath of camera life */
+  R.qAdapt(raw);   /* r6: adaptive quality (drops and recovers) */
   if(R.hitStop>0){
     R.hitStop-=raw;
     R.t+=raw*0.2;
@@ -757,8 +957,15 @@ function loop(now){
     R.draw();
     return;
   }
-  M.update(dt);
+  acc+=raw;
+  let n=0,ppx=R.px,pjy=R.board.jy;
+  while(acc>=STEP&&n<6){ppx=R.px;pjy=R.board.jy;M.update(STEP);acc-=STEP;n++;M.steps++}
+  if(n===6)acc=0;
+  /* interpolate the visible board between sim states (skip across teleports) */
+  const a=n?acc/STEP:1,cx_=R.px,cy_=R.board.jy;
+  if(n&&!kick&&Math.abs(cx_-ppx)<R.W*0.2){R.px=ppx+(cx_-ppx)*a;R.board.jy=pjy+(cy_-pjy)*a}
   R.draw();
+  R.px=cx_;R.board.jy=cy_;
 }
 
 /* ---------- boot ---------- */

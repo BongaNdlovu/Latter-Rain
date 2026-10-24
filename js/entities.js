@@ -4,8 +4,9 @@ window.ROW=window.ROW||{};
 (function(){
 'use strict';
 const R=ROW;
-const C=R.ent={spr:{}};
-C.fallSpeed=()=>R.H*(0.32+Math.min(R.lvl,25)*0.022)*R.fMul;
+const C=R.ent={spr:{},sprQ:[]};
+/* r6: eased ramp (fast early, flattening past level 5) instead of a straight line that kept steepening to 25 */
+C.fallSpeed=()=>R.H*(0.32+0.50*(1-Math.exp(-(R.lvl-1)/11)))*R.fMul;
 
 C.spawnCard=function(){
   /* a guaranteed shield opens every tsunami summit */
@@ -46,16 +47,24 @@ C.spawnCard=function(){
   const tw=R.cx.measureText(word).width;
   const w=Math.round(tw+R.F()*1.5),h=Math.round(R.F()*1.95);
   const margin=w*0.5+14;
-  const x=margin+Math.random()*Math.max(1,(R.W-margin*2));
-  R.cards.push({x,y:-h-10,w,h,word,vy:0.86+Math.random()*0.28,
+  /* r6 fair spacing: a wrong word never spawns right beside a card still in the upper sky, so
+     the right word is never shadowed by a decoy you cannot steer around */
+  const bad=need.indexOf(word)<0;
+  let x=margin+Math.random()*Math.max(1,(R.W-margin*2));
+  if(bad){for(let k=0;k<8;k++){let ok=true;for(const o of R.cards){if(o.dead||o.y>R.gy*0.55)continue;if(Math.abs(o.x-x)<(o.w+w)*0.5+90*R.S){ok=false;break}}
+    if(ok)break;x=margin+Math.random()*Math.max(1,(R.W-margin*2))}}
+  R.cards.push({x,y:-h-10,w,h,word,bad,vy:0.86+Math.random()*0.28,
     r:0,spin:(Math.random()<0.5?-1:1)*(0.7+Math.random()*1.1),
     sway:0.6+Math.random()*1.6,swayPh:Math.random()*6.28,swayAmp:10+Math.random()*26,
     age:0,trail:[],dead:false,fling:0});
 };
 
+const needSet=new Set();
 C.update=function(dt){
   const fs=C.fallSpeed();
+  needSet.clear();if(R.verse)for(const p of R.verse.parts)if(p.b&&!p.f)needSet.add(p.w);
   for(const c of R.cards){
+    c.bad=!c.pow&&!needSet.has(c.word);
     c.age+=dt*R.ts;
     c.y+=c.vy*fs*dt*R.ts*R.slowF;
     if(c.fling){
@@ -102,11 +111,12 @@ C.update=function(dt){
   /* dead cards are removed at once — their effects already fired.
      the old rule (keep dead until offscreen) let ground-missed cards
      pile up in the array forever */
-  R.cards=R.cards.filter(c=>!c.dead);
+  R.fx.compact(R.cards,c=>!c.dead);
 };
 
 /* ---------- bombs: rare falling hazards that cost every heart ---------- */
 C.spawnBomb=function(){
+  if(R.disasters&&!R.disasters.bombsAllowed())return;   /* hazard exclusion: no bombs during/near a disaster */
   let bx=R.rnd(80,R.W-80);
   if(Math.abs(bx-R.px)<140)bx=R.clamp(R.px+140*Math.sign(bx-R.px||1),60,R.W-60);
   R.bombs.push({x:bx,y:-40,w:26*R.S,h:30*R.S,rot:R.rnd(-0.4,0.4),rotV:R.rnd(-1.5,1.5),dead:false});
@@ -124,7 +134,7 @@ C.updateBombs=function(dt){
       R.main.bombHit(b.x,false);
     }
   }
-  R.bombs=R.bombs.filter(b=>!b.dead);
+  R.fx.compact(R.bombs,b=>!b.dead);
 };
 C.drawBombs=function(){
   if(!R.bombs.length)return;
@@ -247,10 +257,13 @@ function sprite(c){
   g.font=`bold ${R.F()}px Georgia`;g.textAlign='center';g.textBaseline='middle';
   g.fillStyle='rgba(80,46,12,.28)';g.fillText(c.word,0.6,R.F()*.05+1.4);
   g.fillStyle='#2a1608';g.fillText(c.word,0,R.F()*.05);
+  /* r6: bounded sprite cache — oldest word sprites are evicted beyond 120 (verses rotate through ~1000 words) */
+  C.sprQ.push(c.word);
+  while(C.sprQ.length>120){const old=C.sprQ.shift();const sp=C.spr[old];if(sp){sp.cv.width=sp.cv.height=0;delete C.spr[old]}}
   return C.spr[c.word]={cv:cv2,P};
 }
 /* sprites are baked at the current font scale — drop them when the viewport changes */
-R.onResize.push(()=>{C.spr={}});
+R.onResize.push(()=>{C.spr={};C.sprQ.length=0});
 
 C.drawGlows=function(){
   const cx=R.cx;
@@ -280,10 +293,10 @@ C.drawFace=function(c,refl){
   const cx=R.cx;
   cx.save();cx.translate(c.x,c.y);cx.rotate(c.r);
   if(!refl){
-    if(e<0.97&&R.filterOK&&R.Q>=1)cx.filter=`blur(${((1-e)*2.6).toFixed(2)}px)`;
+    if(e<0.97&&R.filterOK&&R.qLv>=2)cx.filter=`blur(${((1-e)*2.6).toFixed(2)}px)`;
     /* atmospheric perspective: distant cards sink into the haze */
     cx.globalAlpha=0.45+0.55*e;
-    cx.shadowColor='rgba(255,200,100,.75)';cx.shadowBlur=20*R.S*e;
+    if(R.qLv>=1){cx.shadowColor=c.bad&&e>.45?'rgba(255,70,60,.8)':'rgba(255,200,100,.75)';cx.shadowBlur=(R.qLv>=2?20:10)*R.S*e}
   }
   cx.drawImage(s.cv,-w/2-s.P*sc,-h/2-s.P*sc,w+s.P*2*sc,h+s.P*2*sc);
   cx.filter='none';cx.shadowBlur=0;cx.globalAlpha=1;
@@ -293,6 +306,14 @@ C.drawFace=function(c,refl){
     const sg=cx.createLinearGradient(xs-34,-h/2,xs+34,h/2);
     sg.addColorStop(0,'rgba(255,255,255,0)');sg.addColorStop(.5,'rgba(255,255,255,.32)');sg.addColorStop(1,'rgba(255,255,255,0)');
     cx.fillStyle=sg;cx.fillRect(-w/2,-h/2,w,h);
+    /* r6 telegraph: once a wrong word reaches the lower sky it gains a red wash and a dashed red rim
+       (a fixed cue, never colour-only: the dashes read without colour vision too) */
+    if(c.bad&&e>.45){
+      const k=Math.min(1,(e-.45)/.3);
+      cx.fillStyle=`rgba(200,30,30,${.20*k})`;cx.fillRect(-w/2,-h/2,w,h);
+      cx.setLineDash([7*R.S,5*R.S]);cx.lineWidth=3.2*R.S;cx.strokeStyle=`rgba(255,80,70,${.95*k})`;
+      cx.beginPath();cx.roundRect(-w/2+1.6*R.S,-h/2+1.6*R.S,w-3.2*R.S,h-3.2*R.S,14*h/60);cx.stroke();cx.setLineDash([]);
+    }
   }
   cx.restore();
 };

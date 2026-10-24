@@ -108,8 +108,7 @@ RN.update=function(dt){
       if(!c.dead&&Math.abs(c.x-g.x)<170)c.x+=g.v*dt*0.38;
     }
     for(const dr of R.drops)if(Math.abs(dr.x-g.x)<320)dr.x+=g.v*dt*0.22;
-    if(Math.random()<0.5)R.fx.parts.push({x:g.x-Math.sign(g.v)*60+(Math.random()-0.5)*100,y:gy*(0.3+Math.random()*0.6),
-      vx:g.v*0.25,vy:(Math.random()-0.5)*60,l:0.35,c:'rgba(200,225,250,0.35)',r:(1+Math.random()*2)*R.S});
+    if(Math.random()<0.5)R.fx.add(g.x-Math.sign(g.v)*60+(Math.random()-0.5)*100,gy*(0.3+Math.random()*0.6),g.v*0.25,(Math.random()-0.5)*60,0.35,'rgba(200,225,250,0.35)',(1+Math.random()*2)*R.S);
   }
   R.gusts=R.gusts.filter(g=>g.x>-220&&g.x<W+220);
   /* rain splashing on the ground plane */
@@ -169,12 +168,22 @@ RN.drawBack=function(){
       const f=R.flakes[i];
       if(f.z>0.55)continue;
       cx.globalAlpha=(.3+f.z*.5)*Math.min(1,wx.snow*1.3);
-      cx.beginPath();cx.arc(f.x,f.y,f.r*R.S*0.8,0,R.TAU);cx.fill();
+      /* V2 soft flake sprite instead of a hard disc */
+      const sz=f.r*R.S*(1+f.z*1.6)*2.2;cx.drawImage(flakeS(),f.x-sz/2,f.y-sz/2,sz,sz);
     }
     cx.globalAlpha=1;
   }
 };
 
+/* cached soft snowflake sprite (V2) */
+let flakeSpr=null;
+function flakeS(){
+  if(flakeSpr)return flakeSpr;
+  const c=document.createElement('canvas');c.width=c.height=32;const g=c.getContext('2d');
+  const r=g.createRadialGradient(16,16,0,16,16,16);
+  r.addColorStop(0,'rgba(255,255,255,1)');r.addColorStop(.35,'rgba(240,246,255,.7)');r.addColorStop(1,'rgba(240,246,255,0)');
+  g.fillStyle=r;g.fillRect(0,0,32,32);return flakeSpr=c;
+}
 RN.drawFront=function(){
   const cx=R.cx,wx=R.wx;
   /* near strata — heavier: thicker, faster drops */
@@ -200,13 +209,13 @@ RN.drawFront=function(){
       const f=R.flakes[i];
       if(f.z<=0.55)continue;
       cx.globalAlpha=(.35+f.z*.55)*Math.min(1,wx.snow*1.3);
-      cx.beginPath();cx.arc(f.x,f.y,f.r*R.S*1.3,0,R.TAU);cx.fill();
+      const sz=f.r*R.S*(2.2+f.z*3.4)*1.6;cx.drawImage(flakeS(),f.x-sz/2,f.y-sz/2,sz,sz);
     }
     cx.globalAlpha=1;
   }
   /* sand grains */
   if(wx.sand>.03){
-    cx.strokeStyle=`rgba(226,180,120,${0.16*wx.sand})`;
+    cx.strokeStyle=`rgba(176,162,140,${0.2*wx.sand})`;
     cx.lineWidth=1;
     cx.beginPath();
     const n3=Math.floor(R.sands.length*Math.min(1,wx.sand)*R.Q);

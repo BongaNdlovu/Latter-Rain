@@ -561,32 +561,49 @@ london(g,df,li,LW,rnd){
 
 /* ---- Paris: Eiffel Tower with rotating beacon, Haussmann rows ---- */
 paris(g,df,li,LW,rnd){
+  /* r5: solid, readable Eiffel Tower — four splayed legs, the great arch, three platforms,
+     tapering iron lattice lit gold, antenna. Same palette, just structure that reads at a glance. */
   const drawEiffel=(x,h)=>{
-    const baseW=h*0.34,top=R.gy-h;
-    g.strokeStyle=shade(df.col,26);g.lineWidth=2.2*R.S;
-    g.beginPath();g.moveTo(x-baseW/2,R.gy);g.quadraticCurveTo(x-baseW*0.16,R.gy-h*0.6,x,top);g.stroke();
-    g.beginPath();g.moveTo(x+baseW/2,R.gy);g.quadraticCurveTo(x+baseW*0.16,R.gy-h*0.6,x,top);g.stroke();
-    g.beginPath();g.arc(x,R.gy,baseW*0.17,Math.PI,0);g.stroke();
-    /* platforms */
-    for(const[u,wf]of[[0.3,0.42],[0.58,0.26],[0.82,0.13]]){
-      const py=R.gy-h*u,pw2=baseW*(1-u)+10*R.S;
-      g.fillStyle=shade(df.col,18);g.fillRect(x-pw2/2,py-1.6*R.S,pw2,3.2*R.S);
-    }
-    /* lattice hatch inside the silhouette */
-    g.save();
-    g.beginPath();
-    g.moveTo(x-baseW/2,R.gy);g.quadraticCurveTo(x-baseW*0.16,R.gy-h*0.6,x,top);
-    g.lineTo(x+baseW*0.0,R.gy);
-    g.quadraticCurveTo(x+baseW*0.16,R.gy-h*0.6,x+baseW/2,R.gy);
-    g.closePath();g.clip();
-    g.strokeStyle='rgba(255,255,255,.10)';g.lineWidth=0.8;
-    for(let d2=-h;d2<baseW;d2+=7*R.S){
-      g.beginPath();g.moveTo(x+d2,R.gy);g.lineTo(x+d2+h*0.5,R.gy-h);g.stroke();
-      g.beginPath();g.moveTo(x+d2,R.gy);g.lineTo(x+d2-h*0.5,R.gy-h);g.stroke();
+    const S=R.S,gy=R.gy,top=gy-h,bw=h*0.40;
+    const halfW=u=>{ /* half-width of the silhouette at height fraction u (0 base → 1 top), concave curve */
+      return bw/2*Math.pow(1-u,1.9)+h*0.012};
+    const iron=shade(df.col,30),ironD=shade(df.col,10);
+    /* silhouette */
+    g.fillStyle=ironD;g.beginPath();
+    g.moveTo(x-halfW(0),gy);
+    for(let u=0;u<=1.0001;u+=0.05)g.lineTo(x-halfW(u),gy-h*u*0.9);
+    g.lineTo(x,top+h*0.02);
+    for(let u=1;u>=-0.0001;u-=0.05)g.lineTo(x+halfW(u),gy-h*u*0.9);
+    /* the great arch between the legs */
+    const ah=h*0.17,aw=halfW(0)*0.62;
+    g.lineTo(x+aw,gy);g.quadraticCurveTo(x+aw*0.9,gy-ah*1.25,x,gy-ah*1.2);g.quadraticCurveTo(x-aw*0.9,gy-ah*1.25,x-aw,gy);
+    g.closePath();g.fill();
+    /* lit lattice inside the silhouette */
+    g.save();g.clip();
+    g.strokeStyle='rgba(255,196,100,.55)';g.lineWidth=0.9*S;
+    for(let d2=-h;d2<h;d2+=6*S){
+      g.beginPath();g.moveTo(x+d2,gy);g.lineTo(x+d2+h*0.35,gy-h);g.moveTo(x+d2,gy);g.lineTo(x+d2-h*0.35,gy-h);g.stroke();
     }
     g.restore();
-    g.fillStyle=shade(df.col,30);g.fillRect(x-1,top-7*R.S,2*R.S,7*R.S);
-    R.beacon={x,y:top-8*R.S,li:1};
+    /* leg edges (bright iron) */
+    g.strokeStyle=iron;g.lineWidth=2*S;
+    for(const sg of[-1,1]){g.beginPath();g.moveTo(x+sg*halfW(0),gy);
+      for(let u=0;u<=0.9;u+=0.05)g.lineTo(x+sg*halfW(u),gy-h*u*0.9);g.stroke()}
+    /* platforms */
+    for(const u of[0.19,0.43,0.80]){
+      const py=gy-h*u*0.9,pw2=halfW(u)*2+10*S;
+      g.fillStyle=shade(df.col,36);g.fillRect(x-pw2/2,py-2.6*S,pw2,4.2*S);
+      g.fillStyle='rgba(255,210,130,.75)';for(let q=-pw2/2+3*S;q<pw2/2-2*S;q+=5*S)g.fillRect(x+q,py-1.6*S,1.6*S,1.6*S);
+    }
+    /* antenna and top lantern */
+    g.fillStyle=iron;g.fillRect(x-1.4*S,top-10*S,2.8*S,h*0.12);
+    g.fillStyle='rgba(255,236,190,.95)';g.fillRect(x-3*S,top+h*0.06,6*S,4*S);
+    /* golden night glow */
+    g.save();g.globalCompositeOperation='lighter';
+    const gl=g.createRadialGradient(x,gy-h*0.45,0,x,gy-h*0.45,h*0.55);
+    gl.addColorStop(0,'rgba(255,170,70,.20)');gl.addColorStop(1,'rgba(255,170,70,0)');
+    g.fillStyle=gl;g.fillRect(x-h*0.6,gy-h*1.05,h*1.2,h*1.1);g.restore();
+    R.beacon={x,y:top-10*S,li:1};
   };
   /* Haussmann rows: uniform cornices, mansard roofs, balconies, chimneys */
   let x=-40;
@@ -751,13 +768,16 @@ tokyo(g,df,li,LW,rnd){
   }
 }
 };
+/* exposed so world.js can register more place types */
+E.GEN=GEN;E.PAL=PAL;
 function ph0(li){return R.H*(PAL[R.LOC[R.locI].sky][li].h[1]||0.4)}
 
 /* ---- build all static scenery ---- */
 E.buildAll=function(){
   if(!R.W||!R.H)return;
   const L=R.LOC[R.locI],type=L.sky,defs=PAL[type];
-  const sd=Math.min(2,R.d),LW=Math.ceil(R.W*1.12),LH=Math.ceil(R.gy+8);
+  /* r8: strips are 1.8× the screen so the scenery can drift with the journey (see E.lox) */
+  const sd=Math.min(2,R.d),LW=Math.ceil(R.W*(R.journey?1.8:1.12)),LH=Math.ceil(R.gy+8);
   const rnd=(a,b)=>a+Math.random()*(b-a);
   R.layers=[];R.neons=[];R.lamps=[];R.blinkers=[];R.chimneys=[];R.searchlight=null;
   R.clockFaces=[];R.londonEye=null;R.beacon=null;R.torches=[];
@@ -802,7 +822,7 @@ E.buildAll=function(){
   R.vents=[];
   const gr=L.ground;
   if(gr==='asphalt')[0.18,0.5,0.82].forEach(u=>R.vents.push({x:R.W*u+(Math.random()-0.5)*R.W*0.08,t:Math.random()*1.2}));
-  else if(gr==='flagstone')[0.35,0.72].forEach(u=>R.vents.push({x:R.W*u+(Math.random()-0.5)*R.W*0.06,t:Math.random()*1.5}));
+  else if(gr==='flagstone'||gr==='cobble')[0.35,0.72].forEach(u=>R.vents.push({x:R.W*u+(Math.random()-0.5)*R.W*0.06,t:Math.random()*1.5}));
   /* film grain pattern */
   const nc=document.createElement('canvas');nc.width=nc.height=96;
   const ng=nc.getContext('2d'),id=ng.createImageData(96,96);
@@ -838,16 +858,23 @@ E.update=function(dt){
     });
   }
   for(const b of R.birds){b.x+=b.vx*dt;b.y+=Math.sin(R.t*0.7+b.ph)*7*dt}
-  R.birds=R.birds.filter(b=>b.x>-60&&b.x<R.W+60);
+  R.fx.compact(R.birds,b=>b.x>-60&&b.x<R.W+60);
 };
 
 /* ---- sky ---- */
 E.drawSky=function(){
   const cx=R.cx,f=R.flash,gy=R.gy;
   const g=cx.createLinearGradient(0,0,0,gy+10);
-  g.addColorStop(0,R.rgb(R.wx.top,f));g.addColorStop(.5,R.rgb(R.wx.mid,f*.8));g.addColorStop(1,R.rgb(R.wx.bot,f*.5));
+  /* r6 time of day: the weather's sky colours are pulled toward the hour's sky (less so under heavy cloud,
+     sand or fog, which keep their own colour) */
+  const T=R._tod,sk=E._sk||(E._sk=[[0,0,0],[0,0,0],[0,0,0]]),src=[R.wx.top,R.wx.mid,R.wx.bot];
+  const ww=T?T.sw*(1-Math.min(.7,R.wx.cloud*.45+R.wx.sand*.7+R.wx.fog*.3)):0;
+  for(let r=0;r<3;r++)for(let j=0;j<3;j++)sk[r][j]=src[r][j]+((T?T.sky[r][j]:src[r][j])-src[r][j])*ww;
+  g.addColorStop(0,R.rgb(sk[0],f));g.addColorStop(.5,R.rgb(sk[1],f*.8));g.addColorStop(1,R.rgb(sk[2],f*.5));
   cx.fillStyle=g;cx.fillRect(-80,-80,R.W+160,gy+100);
-  const sv=R.wx.stars*(1-R.wx.cloud*.75);
+  const nt=R._tod?R._tod.night:0;
+  const dy=R._tod?R._tod.day:0;
+  const sv=Math.max(R.wx.stars*(1-dy*.95),nt*.9)*(1-R.wx.cloud*.75);
   if(sv>.02){
     cx.fillStyle='#fff';
     for(const s of R.stars){cx.globalAlpha=sv*s.a*(.35+.65*Math.abs(Math.sin(R.t*s.sp+s.ph)));cx.fillRect(s.x,s.y,s.r,s.r)}
@@ -858,8 +885,9 @@ E.drawSky=function(){
     cx.globalAlpha=Math.min(1,sv*1.3);cx.fillStyle=rg;cx.beginPath();cx.arc(mx,my,mr,0,R.TAU);cx.fill();cx.globalAlpha=1;
   }
   /* sun disc + glow */
-  if(R.wx.sun>0.35&&R.wx.stars<0.5){
-    const sx=R.W*0.74,sy=R.H*0.16,sr=30*R.S,a=R.wx.sun*(1-R.wx.cloud*0.8);
+  const sunA=Math.max(R.wx.sun,dy*.8);
+  if(sunA>0.35&&nt<.5&&(R.wx.stars<0.5||dy>.6)){
+    const sx=R.W*0.74,sy=R.H*0.16,sr=30*R.S,a=sunA*(1-R.wx.cloud*0.8)*(1-nt);
     let sg=cx.createRadialGradient(sx,sy,0,sx,sy,sr*7);
     sg.addColorStop(0,`rgba(255,225,170,${.5*a})`);sg.addColorStop(.25,`rgba(255,200,130,${.2*a})`);sg.addColorStop(1,'rgba(255,190,120,0)');
     cx.fillStyle=sg;cx.fillRect(sx-sr*7,sy-sr*7,sr*14,sr*14);
@@ -940,14 +968,47 @@ E.lightningRays=function(){
 };
 
 /* ---- city / skyline layers + lights ---- */
+/* r5: extra far parallax layer — distant ridge/hills lost in atmospheric haze (cached per place & size) */
+E.drawRidge=function(cx,L,fc){
+  const key=R.locI+'|'+R.W+'|'+R.gy+'|'+fc;
+  if(!E._ridge||E._ridge.key!==key){
+    const c=E._ridge&&E._ridge.c||document.createElement('canvas');
+    const w=Math.ceil(R.W*1.2),h=Math.ceil(R.gy);c.width=w;c.height=h;
+    const g=c.getContext('2d');g.clearRect(0,0,w,h);
+    const flat=L.ground==='water'||L.sky==='city'||L.sky==='newyork'||L.sky==='tokyo';
+    let seed=R.locI*977+13;const rr=()=>{seed=(seed*16807)%2147483647;return seed/2147483647};
+    for(let band=0;band<2;band++){
+      const amp=h*(flat?0.05:0.13)*(band?0.7:1),base=h*(band?0.80:0.74),ph=rr()*6,ph2=rr()*6;
+      g.beginPath();g.moveTo(0,h);
+      for(let x=0;x<=w;x+=8){const y=base-amp*(0.55+0.3*Math.sin(x/w*6.3*1.3+ph)+0.15*Math.sin(x/w*6.3*4.1+ph2)+0.05*Math.sin(x/w*6.3*13+ph));g.lineTo(x,y)}
+      g.lineTo(w,h);g.closePath();
+      g.fillStyle=`rgba(${fc},${band?0.34:0.22})`;g.fill();
+    }
+    /* haze wash over the ridge base */
+    const hz=g.createLinearGradient(0,h*0.55,0,h);hz.addColorStop(0,`rgba(${fc},0)`);hz.addColorStop(1,`rgba(${fc},0.35)`);
+    g.fillStyle=hz;g.fillRect(0,h*0.55,w,h*0.45);
+    E._ridge={key,c};
+  }
+  const r=E._ridge,Jr=R.journey,ox=Jr&&Jr.locked()?-(r.c.width-R.W)*(.15+.7*Jr.progS):-(r.c.width-R.W)/2-(R.px-R.W/2)*0.004;
+  cx.drawImage(r.c,ox,0);
+};
+/* r8 journey travel: each layer slides left as the board crosses the level (far layers slower). Outside a run the
+   old px parallax is used. */
+const LAYER_F=[.45,.75,1];
+E.lox=function(La,i){
+  const sd=Math.min(2,R.d),w=La.c.width/sd,J=R.journey;
+  if(J&&J.locked()&&w>R.W*1.4)return (w-R.W)*((LAYER_F[i]==null?1:LAYER_F[i])*(.5-J.progS)-.5);
+  return -(w-R.W)/2-(R.px-R.W/2)*La.par;
+};
 E.drawCity=function(){
   const cx=R.cx;
   R.lightsS.length=0;
   const L=R.LOC[R.locI],fc=`${L.fogC[0]},${L.fogC[1]},${L.fogC[2]}`;
   const sd=Math.min(2,R.d);
-  const layerOx=i=>{const La=R.layers[i];if(!La)return 0;return -(La.c.width/sd-R.W)/2-(R.px-R.W/2)*La.par};
+  const layerOx=i=>{const La=R.layers[i];if(!La)return 0;return E.lox(La,i)};
+  E.drawRidge(cx,L,fc);
   R.layers.forEach((La,i)=>{
-    const w=La.c.width/sd,ox=-(w-R.W)/2-(R.px-R.W/2)*La.par;
+    const w=La.c.width/sd,ox=E.lox(La,i);
     cx.drawImage(La.c,ox,0,w,R.gy+8);
     if(R.flash>.03){cx.globalCompositeOperation='lighter';cx.globalAlpha=R.flash*.3;cx.drawImage(La.c,ox,0,w,R.gy+8);cx.globalCompositeOperation='source-over';cx.globalAlpha=1}
     if(i<2){
@@ -970,7 +1031,7 @@ E.drawCity=function(){
   /* lamps with volumetric cones */
   for(const l of R.lamps){
     const La=R.layers[l.li];if(!La)continue;
-    const w=La.c.width/sd,ox=-(w-R.W)/2-(R.px-R.W/2)*La.par;
+    const w=La.c.width/sd,ox=E.lox(La,l.li);
     E.drawLamp(l,ox+l.x,l.y);
   }
   /* blinking antenna + crane lights */

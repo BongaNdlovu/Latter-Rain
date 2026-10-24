@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <title>Rain of the Word — Stress Tests</title>
@@ -97,12 +98,42 @@ body.photo #pows,body.photo #hint,body.photo #ctl,body.photo #pz,body.photo #foc
 @keyframes vin{from{opacity:0;transform:translate(-50%,-14px)}}
 .b.f.n{animation:pop .55s cubic-bezier(.2,.9,.3,1.2)}
 #verse,#sc,#hearts,#lvl,#rev{will-change:transform}
+/* ===== V2 integration: combo meter, banner, rank, trick button, location picker ===== */
+/* safe centering: tall menus scroll from their top instead of being clipped above the screen */
+#ov{justify-content:flex-start}#ov>:first-child{margin-top:auto}#ov>:last-child{margin-bottom:auto}
+.db.bd{display:flex;flex-direction:column;align-items:center}
+.db .bth{position:static;inset:auto;width:132px;height:56px;margin:-4px 0 2px;pointer-events:none}
+.db.lk{opacity:.78}
+.bpv{display:flex;flex-direction:column;align-items:center;margin:4px 0 8px}
+#bprev{position:static;inset:auto;width:min(440px,86vw);height:auto;max-height:130px;border:1px solid var(--edge);border-radius:16px;background:radial-gradient(ellipse at 50% 100%,rgba(255,255,255,.07),rgba(0,0,0,.25))}
+#bpn{margin-top:6px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)}
+#rkp{position:fixed;top:calc(env(safe-area-inset-top,0px) + 4.6vh + 50px);left:18px;display:flex;flex-direction:column;min-width:96px;padding:5px 14px 6px;border-radius:999px;background:var(--glass);border:1px solid var(--edge);pointer-events:none}
+body.photo #rkp{opacity:0}
+#lt{margin-right:10px}
+@media(max-width:700px){#rkp{top:calc(env(safe-area-inset-top,0px) + 3.8vh + 96px);left:12px}}
+#rkp .rank{font-size:9px;letter-spacing:.3em;text-transform:uppercase;color:var(--mg);opacity:.9}
+#xpbar{width:100%;height:2px;background:rgba(255,255,255,.1);margin-top:4px;border-radius:2px;overflow:hidden}
+#xpbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--mg),var(--gold));transition:width .6s}
+#combo{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 9vh);transform:translateX(-50%);text-align:center;pointer-events:none;opacity:0;transition:opacity .35s;z-index:6;text-shadow:0 0 20px rgba(255,79,163,.7),0 2px 10px #000;white-space:nowrap}
+#combo.show{opacity:1}
+#combo .tn{font-size:clamp(13px,1.7vw,18px);letter-spacing:.22em;color:#fff;text-transform:uppercase}
+#combo .cm{font-size:clamp(22px,3.4vw,38px);color:var(--gold);font-weight:700;letter-spacing:.06em}
+#combo .cm em{font-style:normal;color:var(--mg);font-size:.6em;margin-left:.4em}
+#combo.pop{animation:cpop .45s cubic-bezier(.2,.9,.3,1.4)}
+@keyframes cpop{0%{transform:translateX(-50%) scale(1.35)}100%{transform:translateX(-50%) scale(1)}}
+#banner{position:fixed;left:50%;top:30%;transform:translate(-50%,-50%);font-size:clamp(26px,5vw,58px);letter-spacing:.14em;text-transform:uppercase;pointer-events:none;opacity:0;z-index:6;text-shadow:0 0 30px currentColor,0 3px 14px #000;white-space:nowrap}
+#banner.show{animation:bnr 1.4s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes bnr{0%{opacity:0;transform:translate(-50%,-50%) scale(1.6)}15%{opacity:1;transform:translate(-50%,-50%) scale(1)}75%{opacity:1}100%{opacity:0;transform:translate(-50%,-62%) scale(.96)}}
+select.sel{font:inherit;font-size:13px;padding:7px 12px;border-radius:10px;background:rgba(9,10,30,.85);color:var(--ink);border:1px solid var(--edge);max-width:92vw}
+body.photo #combo,body.photo #banner{opacity:0!important}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="fx"></div>
-<div id="sc"><span class="lab">Score</span><b id="s">0</b><span id="stt"></span></div>
+<div id="sc"><span class="lab">Score</span><b id="s">0</b><span id="stt"></span></div><div id="rkp" class="rkw"><span class="rank" id="rk"></span><span id="xpbar"><i></i></span></div>
+<div id="combo"><div class="tn"></div><div class="cm"></div></div>
+<div id="banner"></div>
 <div id="verse"></div>
 <div id="hearts"></div>
 <div id="rev"></div>
@@ -112,23 +143,28 @@ body.photo #pows,body.photo #hint,body.photo #ctl,body.photo #pz,body.photo #foc
 <div id="foc"><span class="lab">Focus</span><div id="fbar"><i></i></div></div>
 <div id="pows"></div>
 <div id="hint"></div>
-<div id="ctl"><button class="c" id="jb" title="Jump (W / ↑)">⤒</button><button class="c" id="pb" title="Pause (P)">⏸</button><button class="c" id="mb" title="Sound (M)">🔊</button><button class="c" id="ob" title="Photo (O)">📷</button></div>
-<div id="pz"><h2>Paused</h2><div class="row"><button id="pr">Resume</button><button class="ghost" id="prn">Restart</button><button class="ghost" id="pp">Snapshot</button><button class="ghost" id="pm">Menu</button></div><p>P / Esc resume · Space focus · O snapshot · M mute</p></div>
+<div id="ctl"><button class="c" id="jb" title="Jump (W / ↑)">⤒</button><button class="c" id="kb" title="Kickflip (J) · K heel · L shove · hold S manual">✦</button><button class="c" id="pb" title="Pause (P)">⏸</button><button class="c" id="mb" title="Sound (M)">🔊</button><button class="c" id="ob" title="Photo (O)">📷</button></div>
+<div id="pz"><h2>Paused</h2><div class="row"><button id="pr">Resume</button><button class="ghost" id="prn">Restart</button><button class="ghost" id="pp">Snapshot</button><button class="ghost" id="pm">Menu</button></div><p>P / Esc resume · Space focus · J/K/L tricks · S manual · O snapshot · M mute</p></div>
 <div id="ov"></div>
-<script src="js/data.js"></script>
-<script src="js/core.js"></script>
-<script src="js/fx.js"></script>
-<script src="js/audio.js"></script>
-<script src="js/env.js"></script>
-<script src="js/ground.js"></script>
-<script src="js/weather.js"></script>
-<script src="js/rain.js"></script>
-<script src="js/storm.js"></script>
-<script src="js/disasters.js"></script>
-<script src="js/entities.js"></script>
-<script src="js/board.js"></script>
-<script src="js/camera.js"></script>
-<script src="js/main.js"></script>
-<script src="js/stress.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/core.js"></script>
+<script src="../js/fx.js"></script>
+<script src="../js/audio.js"></script>
+<script src="../js/env.js"></script>
+<script src="../js/world.js"></script>
+<script src="../js/ground.js"></script>
+<script src="../js/weather.js"></script>
+<script src="../js/rain.js"></script>
+<script src="../js/storm.js"></script>
+<script src="../js/disasters.js"></script>
+<script src="../js/entities.js"></script>
+<script src="../js/board3d.js"></script>
+<script src="../js/board.js"></script>
+<script src="../js/tricks.js"></script>
+<script src="../js/skate.js"></script>
+<script src="../js/camera.js"></script>
+<script src="../js/main.js"></script>
+<script src="../js/journey.js"></script>
+<script src="stress.js"></script>
 </body>
 </html>

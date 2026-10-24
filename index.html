@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <title>Rain of the Word — Storm Edition</title>
@@ -98,21 +99,143 @@ body.photo #pows,body.photo #hint,body.photo #ctl,body.photo #pz,body.photo #foc
 @media(max-width:700px){
 #verse{width:94vw;top:calc(env(safe-area-inset-top,0px) + 3.8vh);padding:10px 14px 9px}
 #sc,#hearts{top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 5vh)}
+#hearts{bottom:calc(env(safe-area-inset-bottom,0px) + 5vh + 54px);right:12px}
 #lvl{left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 12vh)}
 #foc{left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 19vh)}
 #ctl{top:50%;bottom:auto;transform:translateY(-50%);right:8px}
 #pows{right:auto;left:12px;top:50%;bottom:auto;transform:translateY(-50%);align-items:flex-start}
 }
+#pz .tch{display:none}
+@media(pointer:coarse){#foc{pointer-events:auto;cursor:pointer}#pz .tch{display:block}#pz .kbh{display:none}}
+/* r6: short landscape phones (≤460px tall) — buttons in a right rail, HUD on the edges, verse clear of both */
+@media(orientation:landscape) and (max-height:460px){
+#verse{top:calc(env(safe-area-inset-top,0px) + 6px);left:10px;transform:none;width:calc(100vw - 250px);max-width:720px;font-size:clamp(14px,2.6vw,20px);line-height:1.35;padding:6px 12px 5px;border-radius:14px}
+#verse small{margin-top:3px}
+#rkp{top:34%;left:10px;min-width:80px}
+#sc{top:auto;left:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);padding:5px 12px}
+#sc b{font-size:19px}
+#hearts{top:auto;right:66px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);padding:6px 10px;gap:5px}
+#hearts svg{width:19px;height:17px}
+#lvl{left:auto;right:62px;transform:none;top:calc(env(safe-area-inset-top,0px) + 6px);bottom:auto;width:150px;box-sizing:border-box;padding:5px 10px;font-size:9px;line-height:1.35}
+#lvl #bar{width:100%}
+#stt em{display:none}
+.stk{margin-right:0;padding:2px 7px;font-size:9px}
+#foc{left:10px;transform:none;bottom:calc(env(safe-area-inset-bottom,0px) + 54px);padding:5px 12px}
+#hint{bottom:calc(env(safe-area-inset-bottom,0px) + 60px);font-size:12px;padding:6px 14px;max-width:56vw}
+#ctl{top:50%;bottom:auto;transform:translateY(-50%);right:max(8px,env(safe-area-inset-right,0px));gap:6px}
+#pows{right:auto;left:10px;top:50%;bottom:auto;transform:translateY(-50%);align-items:flex-start}
+}
+/* r6: narrow portrait — fixed pixel tiers so score / level / focus+hearts never touch */
+@media(max-width:700px) and (orientation:portrait){
+#sc{bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:50%;transform:translateX(-50%);white-space:nowrap;padding:6px 14px}
+#lvl{bottom:calc(env(safe-area-inset-bottom,0px) + 70px);max-width:86vw;box-sizing:border-box}
+#foc{left:12px;transform:none;bottom:calc(env(safe-area-inset-bottom,0px) + 150px)}
+#hearts{right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 150px)}
+#hint{bottom:calc(env(safe-area-inset-bottom,0px) + 206px)}
+#ctl{top:41%;gap:8px}
+}
 #verse.in{animation:vin .7s cubic-bezier(.2,.8,.2,1)}
 @keyframes vin{from{opacity:0;transform:translate(-50%,-14px)}}
 .b.f.n{animation:pop .55s cubic-bezier(.2,.9,.3,1.2)}
 #verse,#sc,#hearts,#lvl,#rev{will-change:transform}
+/* ===== V2 integration: combo meter, banner, rank, trick button, location picker ===== */
+/* safe centering: tall menus scroll from their top instead of being clipped above the screen */
+#ov{justify-content:flex-start}#ov>:first-child{margin-top:auto}#ov>:last-child{margin-bottom:auto}
+.db.bd{display:flex;flex-direction:column;align-items:center}
+.db .bth{position:static;inset:auto;width:132px;height:56px;margin:-4px 0 2px;pointer-events:none}
+.db.lk{opacity:.78}
+.bpv{display:flex;flex-direction:column;align-items:center;margin:4px 0 8px}
+#bprev{position:static;inset:auto;width:min(440px,86vw);height:auto;max-height:130px;border:1px solid var(--edge);border-radius:16px;background:radial-gradient(ellipse at 50% 100%,rgba(255,255,255,.07),rgba(0,0,0,.25))}
+#bpn{margin-top:6px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)}
+#rkp{position:fixed;top:calc(env(safe-area-inset-top,0px) + 4.6vh + 50px);left:18px;display:flex;flex-direction:column;min-width:96px;padding:5px 14px 6px;border-radius:999px;background:var(--glass);border:1px solid var(--edge);pointer-events:none}
+body.photo #rkp{opacity:0}
+#lt{margin-right:10px}
+@media(max-width:700px){#rkp{top:calc(env(safe-area-inset-top,0px) + 3.8vh + 96px);left:12px}}
+#rkp .rank{font-size:9px;letter-spacing:.3em;text-transform:uppercase;color:var(--mg);opacity:.9}
+#xpbar{width:100%;height:2px;background:rgba(255,255,255,.1);margin-top:4px;border-radius:2px;overflow:hidden}
+#xpbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--mg),var(--gold));transition:width .6s}
+#combo{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 9vh);transform:translateX(-50%);text-align:center;pointer-events:none;opacity:0;transition:opacity .35s;z-index:6;text-shadow:0 0 20px rgba(255,79,163,.7),0 2px 10px #000;white-space:nowrap}
+#combo.show{opacity:1}
+#combo .tn{font-size:clamp(13px,1.7vw,18px);letter-spacing:.22em;color:#fff;text-transform:uppercase}
+#combo .cm{font-size:clamp(22px,3.4vw,38px);color:var(--gold);font-weight:700;letter-spacing:.06em}
+#combo .cm em{font-style:normal;color:var(--mg);font-size:.6em;margin-left:.4em}
+#combo.pop{animation:cpop .45s cubic-bezier(.2,.9,.3,1.4)}
+@keyframes cpop{0%{transform:translateX(-50%) scale(1.35)}100%{transform:translateX(-50%) scale(1)}}
+#banner{position:fixed;left:50%;top:30%;transform:translate(-50%,-50%);font-size:clamp(26px,5vw,58px);letter-spacing:.14em;text-transform:uppercase;pointer-events:none;opacity:0;z-index:6;text-shadow:0 0 30px currentColor,0 3px 14px #000;white-space:nowrap}
+#banner.show{animation:bnr 1.4s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes bnr{0%{opacity:0;transform:translate(-50%,-50%) scale(1.6)}15%{opacity:1;transform:translate(-50%,-50%) scale(1)}75%{opacity:1}100%{opacity:0;transform:translate(-50%,-62%) scale(.96)}}
+/* ===== r8 journey HUD ===== */
+.b.cur{border-color:var(--gold);box-shadow:0 9px 16px -9px var(--amber)}
+#warn{top:calc(env(safe-area-inset-top,0px) + 27vh)}
+#jhud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 4.6vh + 100px);left:18px;display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:9px 14px;border-radius:16px;background:var(--glass);border:1px solid var(--edge);font-size:12px;letter-spacing:.08em;pointer-events:none;font-variant-numeric:tabular-nums;transition:opacity .2s;z-index:5}
+#jhud:empty{display:none}
+#jhud i{font-style:normal;opacity:.55;margin-right:4px;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+#jhud .pm{width:46px;height:5px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;display:inline-block;vertical-align:middle}
+#jhud .pm u{display:block;height:100%;background:linear-gradient(90deg,var(--amber),var(--gold));text-decoration:none}
+#jhud .st u{display:block;height:100%;background:linear-gradient(90deg,#ff4f7a,#a02050);text-decoration:none}
+#jhud.near{border-color:rgba(255,79,122,.8);box-shadow:0 0 22px rgba(255,79,122,.45)}
+body.photo #jhud{opacity:0!important}
+@media(max-width:700px){#jhud{top:calc(env(safe-area-inset-top,0px) + 3.8vh + 98px);right:12px;left:auto;transform:none;flex-direction:row;align-items:center;border-radius:999px;white-space:nowrap;font-size:10px;gap:7px;padding:4px 9px}#jhud .pm{width:26px}#jhud i{margin-right:2px}#warn{top:calc(env(safe-area-inset-top,0px) + 30vh)}}
+@media(orientation:landscape) and (max-height:460px){#jhud{top:calc(env(safe-area-inset-top,0px) + 56px);right:62px;left:auto;bottom:auto;transform:none;flex-direction:row;align-items:center;border-radius:999px;font-size:10px;gap:7px;padding:4px 9px}#warn{top:calc(env(safe-area-inset-top,0px) + 62px);font-size:12px;padding:6px 14px}}
+/* ===== r10 cinematic HUD during a journey run (body.vec): quiet, glassy, white type, one accent ===== */
+body.vec #verse{background:linear-gradient(180deg,rgba(4,6,12,.42),rgba(4,6,12,0));border:0;box-shadow:none;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.65),0 0 22px rgba(0,0,0,.35);letter-spacing:.01em}
+body.vec #verse small{color:rgba(255,255,255,.75);border-color:rgba(255,255,255,.25)}
+body.vec .b{border-bottom-color:rgba(255,255,255,.55);box-shadow:none}
+body.vec .b.cur{border-bottom-color:#c9a6ff;box-shadow:0 8px 14px -10px #a46bff}
+body.vec .b.f{color:#fff;border-color:#c9a6ff;text-shadow:0 0 14px rgba(170,110,255,.8)}
+body.vec #sc,body.vec #hearts,body.vec #lvl,body.vec #foc,body.vec #rkp,body.vec #jhud{background:rgba(6,8,14,.34);border:1px solid rgba(255,255,255,.08);box-shadow:none;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+body.vec #sc b{color:#fff;text-shadow:none}
+body.vec #loc{color:#dccbff}
+body.vec #hearts svg{fill:#fff;filter:drop-shadow(0 0 4px rgba(255,255,255,.5))}
+body.vec #hearts .x svg{fill:rgba(255,255,255,.18);filter:none}
+body.vec #banner{color:#fff!important;text-shadow:0 0 18px rgba(170,110,255,.6),0 2px 10px rgba(0,0,0,.6);letter-spacing:.3em;font-size:clamp(20px,3.4vw,40px)}
+body.vec #combo{text-shadow:0 2px 10px rgba(0,0,0,.6)}
+body.vec #combo .cm{color:#fff}body.vec #combo .cm em{color:#c9a6ff}
+body.vec #rkp .rank{color:#dccbff}
+body.vec button.c{background:rgba(6,8,14,.34);color:#fff;border-color:rgba(255,255,255,.12);box-shadow:none}
+body.vec #jhud .pm u{background:linear-gradient(90deg,#8a5cff,#d6c2ff)}
+body.vec #jhud .st u{background:linear-gradient(90deg,#9aa3b8,#e6ebf5)}
+body.vec #jhud.near{border-color:rgba(255,255,255,.4);box-shadow:0 0 18px rgba(0,0,0,.5)}
+body.vec #warn{background:rgba(6,8,14,.55);border-color:rgba(255,255,255,.15);color:#fff;box-shadow:none}
+#verse.sm{animation:vsm 3s ease}
+@keyframes vsm{0%{filter:none}15%{filter:drop-shadow(0 0 18px rgba(200,170,255,.9));transform:translateX(-50%) scale(1.05)}85%{filter:drop-shadow(0 0 12px rgba(200,170,255,.6));transform:translateX(-50%) scale(1.05)}100%{filter:none;transform:translateX(-50%) scale(1)}}
+/* ===== r14 paged menu ===== */
+body.inmenu #sc,body.inmenu #rkp,body.inmenu #hearts,body.inmenu #lvl,body.inmenu #foc,body.inmenu #jhud,body.inmenu #ctl,body.inmenu #verse,body.inmenu #pows,body.inmenu #combo{opacity:0!important;pointer-events:none!important}
+#ov.mn{background:radial-gradient(ellipse at 50% 30%,rgba(30,40,70,.72),rgba(3,4,10,.94))}
+#ov.mn h1{font-size:clamp(38px,7vw,72px);background:linear-gradient(180deg,#fff,#e6dcff 60%,#b49cff);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 22px rgba(170,130,255,.35))}
+#ov.mn h2{margin:0;font-weight:400;font-size:clamp(26px,4vw,40px);letter-spacing:.06em;color:#fff}
+#ov.mn button{background:linear-gradient(180deg,#f2ecff,#bfa8ff);color:#140c26;box-shadow:0 0 26px rgba(170,130,255,.35),0 5px 0 #6e55b8}
+#ov.mn button.ghost{background:rgba(255,255,255,.06);color:#fff;border:1px solid rgba(255,255,255,.18);box-shadow:none}
+#ov.mn button.db{background:rgba(255,255,255,.05);color:#fff;border:1px solid rgba(255,255,255,.14);box-shadow:none}
+#ov.mn button.db.on{background:linear-gradient(180deg,#f2ecff,#bfa8ff);color:#140c26;border-color:transparent}
+#ov.mn .msec{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1)}
+#ov.mn .msec b{color:#cdb9ff}
+.mhome{display:flex;flex-direction:column;align-items:center;gap:14px;margin:auto}
+.mnav{display:flex;flex-direction:column;align-items:stretch;gap:12px;width:min(420px,88vw)}
+.mnav .big{display:flex;flex-direction:column;align-items:center;padding:14px 20px;margin:0}
+.mnav .big small{font-size:11px;font-weight:400;letter-spacing:.08em;opacity:.75;margin-top:4px}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mgrid button{margin:0;padding:12px 10px;font-size:15px}
+.mgrid button:last-child{grid-column:1/-1}
+.mfoot{opacity:.5!important;font-size:12px!important;letter-spacing:.12em;text-transform:uppercase}
+.mh{display:flex;flex-direction:column;align-items:center;gap:6px;width:min(720px,92vw);position:relative;margin-top:auto}
+.mh .back{position:absolute;left:0;top:0;margin:0;padding:8px 14px;font-size:13px}
+.lvgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;width:min(900px,94vw);margin-bottom:auto}
+.lv{display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin:0!important;padding:10px 12px!important;text-align:left;font-size:13px!important;border-radius:14px!important;
+  background:rgba(255,255,255,.05)!important;color:#fff!important;border:1px solid rgba(255,255,255,.14)!important;box-shadow:none!important}
+.lv b{font-size:20px;color:#cdb9ff}.lv span{font-weight:600;letter-spacing:.02em}.lv small{font-size:10px;opacity:.6;font-weight:400;letter-spacing:.06em}
+.lv.lk{opacity:.4;cursor:default}
+@media(max-width:520px){.mh .back{position:static;align-self:flex-start}}
+select.sel{font:inherit;font-size:13px;padding:7px 12px;border-radius:10px;background:rgba(9,10,30,.85);color:var(--ink);border:1px solid var(--edge);max-width:92vw}
+body.photo #combo,body.photo #banner{opacity:0!important}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="fx"></div>
-<div id="sc"><span class="lab">Score</span><b id="s">0</b><span id="stt"></span></div>
+<div id="sc"><span class="lab">Score</span><b id="s">0</b><span id="stt"></span></div><div id="rkp" class="rkw"><span class="rank" id="rk"></span><span id="xpbar"><i></i></span></div>
+<div id="combo"><div class="tn"></div><div class="cm"></div></div>
+<div id="banner"></div>
 <div id="verse"></div>
 <div id="hearts"></div>
 <div id="rev"></div>
@@ -122,22 +245,32 @@ body.photo #pows,body.photo #hint,body.photo #ctl,body.photo #pz,body.photo #foc
 <div id="foc"><span class="lab">Focus</span><div id="fbar"><i></i></div></div>
 <div id="pows"></div>
 <div id="hint"></div>
-<div id="ctl"><button class="c" id="jb" title="Jump (W / ↑)">⤒</button><button class="c" id="pb" title="Pause (P)">⏸</button><button class="c" id="mb" title="Sound (M)">🔊</button><button class="c" id="ob" title="Photo (O)">📷</button></div>
-<div id="pz"><h2>Paused</h2><div class="row"><button id="pr">Resume</button><button class="ghost" id="prn">Restart</button><button class="ghost" id="pp">Snapshot</button><button class="ghost" id="pm">Menu</button></div><p>P / Esc resume · Space focus · O snapshot · M mute</p></div>
+<div id="jhud"></div>
+<div id="ctl"><button class="c" id="jb" title="Jump (Space / W / ↑)">⤒</button><button class="c" id="dn" title="Hold: fast-fall / manual (S / ↓)">⤓</button><button class="c" id="kb" title="Kickflip (J) · K heel · L shove · hold S manual">✦</button><button class="c" id="pb" title="Pause (P)">⏸</button><button class="c" id="mb" title="Sound (M)">🔊</button><button class="c" id="ob" title="Photo (O)">📷</button></div>
+<div id="pz"><h2>Paused</h2><div class="row"><button id="pr">Resume</button><button class="ghost" id="prn">Restart level</button><button class="ghost" id="pp">Snapshot</button><button class="ghost" id="pm">Exit to menu</button></div><p class="kbh">P / Esc resume · Space/W/↑ ollie (instant) · Shift focus · J K L H V T flips · G/B grabs · S/E manuals · ↓ on a rail = boardslide · O snapshot · M mute</p><p class="tch">Tap = ollie (hold = higher) · tap again in the air = trick · drag down or ⤓ = stay low · ✦ = kickflip · tap FOCUS to slow the storm</p></div>
 <div id="ov"></div>
 <script src="js/data.js"></script>
 <script src="js/core.js"></script>
 <script src="js/fx.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/sfx.js"></script>
 <script src="js/env.js"></script>
+<script src="js/world.js"></script>
+<script src="js/places.js"></script>
 <script src="js/ground.js"></script>
 <script src="js/weather.js"></script>
 <script src="js/rain.js"></script>
 <script src="js/storm.js"></script>
 <script src="js/disasters.js"></script>
 <script src="js/entities.js"></script>
+<script src="js/board3d.js"></script>
 <script src="js/board.js"></script>
+<script src="js/tricks.js"></script>
+<script src="js/skate.js"></script>
 <script src="js/camera.js"></script>
 <script src="js/main.js"></script>
+<script src="js/journey.js"></script>
+<script src="js/vector.js"></script>
+<script src="js/menu.js"></script>
 </body>
 </html>

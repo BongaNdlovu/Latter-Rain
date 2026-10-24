@@ -20,6 +20,7 @@ B.jump=function(){
   if(!(R.st==='play'||R.st==='wait'||R.st==='trans'))return;
   B.jv=640*B.def().jump;
   B.grounded=false;
+  if(R.tricks)R.tricks.onJump();
   R.audio.noise(700,'bandpass',0.12,0.12);
   R.audio.tone(240,'sine',0.1,0.05);
   R.vibrate(12);
@@ -36,7 +37,7 @@ B.update=function(dt){
     if(B.jy<=0){
       B.jy=0;
       if(B.jv<-140){
-        /* landing: squash, dust/spray, thud */
+        /* landing: squash, dust/spray, thud (any trick verdict is made in R.tricks.onLand) */
         B.squash=1;
         R.cam.punchFn(0.25);
         const dust=R.LOC[R.locI].ground==='sand'?'rgba(210,170,110,0.8)'
@@ -47,19 +48,14 @@ B.update=function(dt){
         R.audio.tone(90,'sine',0.08,0.1);
         R.vibrate(10);
       }
+      if(R.tricks)R.tricks.onLand(B.jv);
       B.jv=0;B.grounded=true;
     }
   }
   /* Transformer embers */
   if(R.transformT>0&&(R.st==='play'||R.st==='wait'||R.st==='trans')){
     for(let i=0;i<2;i++){
-      R.fx.parts.push({
-        x:R.px-38*R.S+(Math.random()-0.5)*10*R.S,
-        y:R.gy-B.jy-8*R.S+(Math.random()-0.5)*8*R.S,
-        vx:-Math.abs(R.vel)*0.25-(30+Math.random()*50),
-        vy:-(20+Math.random()*80),
-        l:0.45,c:'rgba(255,190,90,0.9)',r:(1+Math.random()*1.8)*R.S
-      });
+      R.fx.add(R.px-38*R.S+(Math.random()-0.5)*10*R.S,R.gy-B.jy-8*R.S+(Math.random()-0.5)*8*R.S,-Math.abs(R.vel)*0.25-(30+Math.random()*50),-(20+Math.random()*80),0.45,'rgba(255,190,90,0.9)',(1+Math.random()*1.8)*R.S);
     }
   }
   /* wheel spray droplets (only when rolling near the ground) */
@@ -67,13 +63,7 @@ B.update=function(dt){
     const spd=Math.abs(R.vel);
     const n=spd>R.W*0.15?2:1;
     for(let i=0;i<n;i++){
-      R.fx.parts.push({
-        x:R.px+(Math.random()<.5?-1:1)*44*R.S+(Math.random()-0.5)*14*R.S,
-        y:R.gy+2*R.S,
-        vx:(Math.random()-0.5)*200-R.lean*160,
-        vy:-70-Math.random()*170,
-        l:0.5,c:'rgba(190,232,255,0.85)',r:(1+Math.random()*1.6)*R.S
-      });
+      R.fx.add(R.px+(Math.random()<.5?-1:1)*44*R.S+(Math.random()-0.5)*14*R.S,R.gy+2*R.S,(Math.random()-0.5)*200-R.lean*160,-70-Math.random()*170,0.5,'rgba(190,232,255,0.85)',(1+Math.random()*1.6)*R.S);
     }
   }
 };
@@ -107,20 +97,22 @@ B.draw=function(refl){
   const cx=R.cx,k=R.S*1.15,pw=1+R.bPulse*.05;
   const def=B.def();
   const tf=R.transformT>0;
-  cx.save();cx.translate(R.px,R.gy);
-  /* contact shadow stays on the ground plane, grows and fades with height */
+  const SK=R.skate,bxp=SK?SK.drawX():R.px,byp=SK?SK.drawY():B.jy;
+  /* shadow falls on the surface under the board (a ledge top or the road) */
+  const shH=SK&&!SK.crash?Math.max(0,Math.min(byp,SK.shadowH||0)):0;
+  cx.save();cx.translate(bxp,R.gy-shH);
   if(!refl){
-    const sf=1/(1+B.jy/(160*R.S));
+    const hgt=Math.max(0,byp-shH),sf=1/(1+hgt/(160*R.S));
     cx.save();
-    cx.globalAlpha=0.35*(0.4+R.wx.wet*0.6)*Math.max(0.25,sf)*(1-Math.min(0.8,B.jy/(300*R.S)));
+    cx.globalAlpha=0.35*(0.4+R.wx.wet*0.6)*Math.max(0.25,sf)*(1-Math.min(0.8,hgt/(300*R.S)));
     cx.fillStyle='#000';
     cx.scale((1+ (1-sf)*0.8),0.22);
     cx.beginPath();cx.arc(0,0,66*k,0,R.TAU);cx.fill();
     cx.restore();
   }
-  cx.translate(0,-B.jy);
-  const bob=refl?0:Math.sin(R.t*19)*.35*k*Math.min(1,.5+Math.abs(R.lean)*2);
-  cx.translate(0,-bob);cx.rotate(R.lean*.09*(1-Math.min(0.5,B.jy/(280*R.S))));
+  cx.translate(0,-(byp-shH));
+  const bob=(refl||(SK&&(SK.crash||!B.grounded)))?0:Math.sin(R.t*19)*.35*k*Math.min(1,.5+Math.abs(R.lean)*2);
+  cx.translate(0,-bob);cx.rotate(SK&&SK.crash?0:R.lean*.09*(1-Math.min(0.5,B.jy/(280*R.S))));
   const sq=refl?0:B.squash;
   cx.scale(pw*(1+0.08*sq),pw*(1-0.12*sq));
 
@@ -147,92 +139,17 @@ B.draw=function(refl){
     cx.globalCompositeOperation='source-over';
   }
 
-  /* ---- trucks + wheels ---- */
-  for(const sx of[-38,38]){
-    /* baseplate + hanger */
-    cx.fillStyle='#39424e';
-    cx.beginPath();
-    cx.moveTo((sx-9)*k,-24*k);cx.lineTo((sx+9)*k,-24*k);
-    cx.lineTo((sx+6)*k,-16*k);cx.lineTo((sx-6)*k,-16*k);
-    cx.closePath();cx.fill();
-    cx.fillStyle='#525f6e';
-    cx.fillRect((sx-5)*k,-17.5*k,10*k,2*k);
-    /* kingpin */
-    cx.fillStyle='#2b323b';
-    cx.beginPath();cx.arc(sx*k,-19*k,2.2*k,0,R.TAU);cx.fill();
-    /* wheel: urethane tinted per board, hub + spinning spokes */
-    const wr=9*k;
-    let wg=cx.createRadialGradient((sx-2)*k,-9*k,wr*0.15,sx*k,-9*k,wr);
-    wg.addColorStop(0,'#f4f8fc');wg.addColorStop(.55,def.wheel);wg.addColorStop(1,'#4a5a6c');
-    cx.fillStyle=wg;cx.beginPath();cx.arc(sx*k,-9*k,wr,0,R.TAU);cx.fill();
-    cx.strokeStyle='rgba(20,26,34,.8)';cx.lineWidth=1.2*k;
-    cx.beginPath();cx.arc(sx*k,-9*k,wr,0,R.TAU);cx.stroke();
-    cx.fillStyle='#c9d6e4';
-    cx.beginPath();cx.arc(sx*k,-9*k,3.6*k,0,R.TAU);cx.fill();
-    cx.fillStyle='#0d141c';
-    cx.beginPath();cx.arc(sx*k,-9*k,1.8*k,0,R.TAU);cx.fill();
-    cx.save();cx.translate(sx*k,-9*k);cx.rotate(R.wRot);
-    cx.strokeStyle='rgba(255,255,255,.65)';cx.lineWidth=1*k;
-    for(let a2=0;a2<3;a2++){
-      cx.rotate(R.TAU/3);
-      cx.beginPath();cx.moveTo(0,2*k);cx.lineTo(0,7.4*k);cx.stroke();
+  /* ---- 3D board (board3d.js): flips / shove-its / manual pitch come from R.tricks ---- */
+  {
+    const o=R.tricks?R.tricks.boardOpts(def,tf):{flipAngle:0,spinAngle:R.lean*.35,tilt:0,deckColors:[def.art[1],def.art[2]],gripColor:'#1d1d22',look:def.look,vp:.26};
+    /* sprite-cached when riding; live polygons only during flips (perf) */
+    window.drawSkateboardFast(cx,0,0,1.95*R.S,o,Math.min(2,R.d));
+    /* neon rim pulse on catches, now as a glow line under the deck */
+    if(!refl&&R.bPulse>0){
+      cx.save();cx.globalCompositeOperation='lighter';
+      cx.strokeStyle=`rgba(${def.glow},${0.7*R.bPulse})`;cx.lineWidth=1.6*k;
+      cx.beginPath();cx.moveTo(-60*k,-24*k);cx.quadraticCurveTo(0,-20*k,60*k,-24*k);cx.stroke();cx.restore();
     }
-    cx.restore();
-  }
-
-  /* ---- deck: wood core, plies, grip tape, board-coloured art ---- */
-  const top=()=>{
-    cx.beginPath();
-    cx.moveTo(-66*k,-37*k);
-    cx.quadraticCurveTo(-52*k,-26*k,-40*k,-26*k);
-    cx.lineTo(40*k,-26*k);
-    cx.quadraticCurveTo(52*k,-26*k,66*k,-37*k);
-  };
-  const bottom=()=>{
-    cx.beginPath();
-    cx.moveTo(66*k,-32*k);
-    cx.quadraticCurveTo(52*k,-21*k,40*k,-21*k);
-    cx.lineTo(-40*k,-21*k);
-    cx.quadraticCurveTo(-52*k,-21*k,-66*k,-32*k);
-  };
-  cx.lineCap='round';cx.lineJoin='round';
-  if(!refl&&R.bPulse>0){cx.shadowColor=def.wheel;cx.shadowBlur=26*k*R.bPulse}
-  top();
-  cx.lineTo(66*k,-32*k);
-  bottom();
-  cx.closePath();
-  const wood=tf
-    ?(()=>{const w2=cx.createLinearGradient(0,-37*k,0,-21*k);w2.addColorStop(0,'#ffe2a0');w2.addColorStop(.5,'#ffab4a');w2.addColorStop(1,'#c86a28');return w2})()
-    :(()=>{const w2=cx.createLinearGradient(0,-37*k,0,-21*k);w2.addColorStop(0,'#d9b078');w2.addColorStop(.5,'#b98a52');w2.addColorStop(1,'#8a5a34');return w2})();
-  cx.fillStyle=wood;cx.fill();cx.shadowBlur=0;
-  /* ply lines on the core */
-  cx.save();
-  top();cx.lineTo(66*k,-32*k);bottom();cx.closePath();cx.clip();
-  cx.strokeStyle='rgba(70,40,18,.5)';cx.lineWidth=0.8*k;
-  for(let i=1;i<=2;i++){
-    cx.beginPath();cx.moveTo(-66*k,-36*k+i*5*k);cx.lineTo(66*k,-36*k+i*5*k);cx.stroke();
-  }
-  /* deck art stripe in the board's colours */
-  const art=cx.createLinearGradient(-64*k,0,64*k,0);
-  art.addColorStop(0,def.art[0]);art.addColorStop(.5,def.art[1]);art.addColorStop(1,def.art[2]);
-  cx.strokeStyle=art;cx.lineWidth=3*k;
-  cx.beginPath();cx.moveTo(-58*k,-27.5*k);cx.quadraticCurveTo(0,-24.5*k,58*k,-27.5*k);cx.stroke();
-  if(tf){
-    /* molten second stripe */
-    cx.strokeStyle='rgba(255,240,190,.8)';cx.lineWidth=1.2*k;
-    cx.beginPath();cx.moveTo(-58*k,-25.5*k);cx.quadraticCurveTo(0,-22.5*k,58*k,-25.5*k);cx.stroke();
-  }
-  cx.restore();
-  /* grip tape along the top edge */
-  top();
-  cx.strokeStyle='#14161c';cx.lineWidth=2.6*k;cx.stroke();
-  /* rail highlight */
-  top();
-  cx.strokeStyle='rgba(255,255,255,.22)';cx.lineWidth=0.9*k;cx.stroke();
-  /* neon rim pulse */
-  if(!refl&&R.bPulse>0){
-    top();
-    cx.strokeStyle=`rgba(${def.glow},${0.85*R.bPulse})`;cx.lineWidth=1.4*k;cx.stroke();
   }
 
   /* ---- energy dome shield ---- */

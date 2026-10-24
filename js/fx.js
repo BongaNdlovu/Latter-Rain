@@ -8,11 +8,23 @@ const F=R.fx={
 };
 F.reset=function(){F.parts.length=0;F.rings.length=0;F.splashes.length=0;F.flyTexts.length=0;F.trailPts.length=0;F.shieldRipples.length=0};
 
+/* r6 memory: particles come from a pool and dead ones go back to it; arrays are compacted in place
+   (no per-frame filter() allocations); hard cap keeps worst-case bursts bounded. */
+F.pool=[];F.PMAX=900;F.POOLMAX=1200;
+F.add=function(x,y,vx,vy,l,c,r,gr){
+  let p;
+  if(F.parts.length>=F.PMAX){p=F.parts[(Math.random()*F.parts.length)|0]}   /* recycle a live one instead of growing */
+  else{p=F.pool.pop()||{x:0,y:0,vx:0,vy:0,l:0,c:'',r:0,gr:0};F.parts.push(p)}
+  p.x=x;p.y=y;p.vx=vx;p.vy=vy;p.l=l;p.c=c;p.r=r;p.gr=gr||0;return p;
+};
+function compact(a,keep,pool){let j=0;for(let i=0;i<a.length;i++){const o=a[i];if(keep(o))a[j++]=o;else if(pool&&pool.length<F.POOLMAX)pool.push(o)}a.length=j}
+F.compact=compact;
+const aliveP=p=>p.l>0,aliveR=r=>r.a>0,aliveF=f=>f.t<1;
 F.burst=function(x,y,c,n,v){
   n=n||38;v=v||420;
   for(let i=0;i<n;i++){
     const a=Math.random()*R.TAU,s=Math.random()*v;
-    F.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-v*0.32,l:1,c,r:(1+Math.random()*3.4)*R.S});
+    R.fx.add(x,y,Math.cos(a)*s,Math.sin(a)*s-v*0.32,1,c,(1+Math.random()*3.4)*R.S);
   }
 };
 F.flashScreen=function(c){
@@ -28,24 +40,24 @@ F.update=function(dt){
     if(p.gr){p.r+=p.gr*dt;p.vy*=Math.max(0,1-dt*0.6)}
     p.l-=dt*1.35;
   }
-  F.parts=F.parts.filter(p=>p.l>0);
+  compact(F.parts,aliveP,F.pool);
   for(const r of F.rings){r.r+=dt*620;r.a-=dt*2.1}
-  F.rings=F.rings.filter(r=>r.a>0);
+  compact(F.rings,aliveR);
   for(const s of F.splashes){s.r+=dt*90*R.S;s.a-=dt*2.0}
-  F.splashes=F.splashes.filter(s=>s.a>0);
+  compact(F.splashes,aliveR);
   for(const f of F.flyTexts)f.t+=dt/0.62;
-  F.flyTexts=F.flyTexts.filter(f=>f.t<1);
+  compact(F.flyTexts,aliveF);
   /* text spam cap: keep the glow affordable */
   if(F.flyTexts.length>20)F.flyTexts.splice(0,F.flyTexts.length-20);
   if(F.rings.length>48)F.rings.splice(0,F.rings.length-48);
   for(const rp of F.shieldRipples){rp.r+=dt*300*R.S;rp.a-=dt*2.4}
-  F.shieldRipples=F.shieldRipples.filter(rp=>rp.a>0);
+  compact(F.shieldRipples,aliveR);
   /* lens droplets */
   if(R.wx&&R.wx.rain>0.25&&F.lensDrops.length<30&&Math.random()<dt*R.wx.rain*3.2){
     F.lensDrops.push({x:Math.random()*R.W,y:Math.random()*R.H*0.8,r:(2+Math.random()*7)*R.S,vy:8+Math.random()*26,life:0,wob:Math.random()*6.3});
   }
   for(const D of F.lensDrops){D.life=Math.min(1,D.life+dt*1.2);D.y+=D.vy*dt*(0.4+D.r*0.06)*R.ts;D.x+=Math.sin(R.t*2+D.wob)*6*dt}
-  F.lensDrops=F.lensDrops.filter(D=>D.y<R.H+12&&(R.wx.rain>=0.2||((D.life-=dt*1.6)>0)));
+  compact(F.lensDrops,D=>D.y<R.H+12&&(R.wx.rain>=0.2||((D.life-=dt*1.6)>0)));
   /* streak trail */
   if(R.streak>=6&&(R.st==='play'||R.st==='wait'||R.st==='trans')){
     F.trailPts.push({x:R.px,y:R.gy});
@@ -56,9 +68,7 @@ F.update=function(dt){
     v.t-=dt;
     if(v.t<=0){
       v.t=0.5+Math.random()*0.9;
-      F.parts.push({x:v.x+(Math.random()-0.5)*20*R.S,y:R.gy+4,
-        vx:(Math.random()-0.5)*14+R.lean*10,vy:-(20+Math.random()*26),
-        l:1.6,gr:(26+Math.random()*20)*R.S,c:'rgba(185,195,215,0.07)',r:(8+Math.random()*8)*R.S});
+      R.fx.add(v.x+(Math.random()-0.5)*20*R.S,R.gy+4,(Math.random()-0.5)*14+R.lean*10,-(20+Math.random()*26),1.6,'rgba(185,195,215,0.07)',(8+Math.random()*8)*R.S,(26+Math.random()*20)*R.S);
     }
   }
 };
@@ -85,10 +95,13 @@ F.drawParticles=function(){
     cx.lineWidth=3.5*r.a*R.S;
     cx.beginPath();cx.arc(r.x,r.y,r.r,0,R.TAU);cx.stroke();
   }
-  for(const p of F.parts){
-    cx.globalAlpha=Math.max(0,p.l);
-    cx.fillStyle=p.c;
-    cx.beginPath();cx.arc(p.x,p.y,p.r,0,R.TAU);cx.fill();
+  /* r6: batched — fillStyle only changes when the colour does; tiny sparks are rects, not arcs */
+  let lc=null;const ps=F.parts;
+  for(let i=0;i<ps.length;i++){const p=ps[i];
+    cx.globalAlpha=p.l>1?1:p.l;
+    if(p.c!==lc){cx.fillStyle=p.c;lc=p.c}
+    if(p.r<2.2){const d=p.r*1.7;cx.fillRect(p.x-d/2,p.y-d/2,d,d)}
+    else{cx.beginPath();cx.arc(p.x,p.y,p.r,0,R.TAU);cx.fill()}
   }
   cx.globalAlpha=1;
   cx.globalCompositeOperation='source-over';
